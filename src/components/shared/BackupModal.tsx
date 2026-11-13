@@ -562,6 +562,7 @@ export default function BackupModal({ isOpen, onClose, onSuccess }: Props) {
       }
     };
     reader.readAsText(file);
+    e.target.value = "";
   };
 
   // Manual Import from text paste

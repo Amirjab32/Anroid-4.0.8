@@ -783,6 +783,66 @@
       "priority": "medium",
       "created_date": "2026-11-12",
       "elapsed_seconds": 0
+    },
+    {
+      "id": "t-c1-a",
+      "title": "چینی دوره اول - درس ۱",
+      "description": "",
+      "priority": "high",
+      "scheduled_date": "2026-11-13",
+      "activity_id": null,
+      "status": "todo",
+      "kanban_column": "todo",
+      "created_date": "2026-11-13",
+      "elapsed_seconds": 0,
+      "timer_started_at": null,
+      "timeline_slot": null,
+      "timeline_date": null,
+      "intervals": [],
+      "tags": [
+        "چینی",
+        "دوره-اول"
+      ]
+    },
+    {
+      "id": "t-c1-b",
+      "title": "چینی دوره اول - درس ۲",
+      "description": "",
+      "priority": "high",
+      "scheduled_date": "2026-11-13",
+      "activity_id": null,
+      "status": "todo",
+      "kanban_column": "todo",
+      "created_date": "2026-11-13",
+      "elapsed_seconds": 0,
+      "timer_started_at": null,
+      "timeline_slot": null,
+      "timeline_date": null,
+      "intervals": [],
+      "tags": [
+        "چینی",
+        "دوره-اول"
+      ]
+    },
+    {
+      "id": "t-c2-a",
+      "title": "چینی دوره دوم - درس ۱",
+      "description": "",
+      "priority": "medium",
+      "scheduled_date": "2026-11-13",
+      "activity_id": null,
+      "status": "todo",
+      "kanban_column": "todo",
+      "created_date": "2026-11-13",
+      "elapsed_seconds": 0,
+      "timer_started_at": null,
+      "timeline_slot": null,
+      "timeline_date": null,
+      "intervals": [],
+      "tags": [
+        "چینی",
+        "دوره-دوم"
+      ]
     }
   ],
   "focusflow_recurring_activities": [
@@ -1004,8 +1064,8 @@
   "focusflow_prayer_offset": 0,
   "focusflow_custom_audio_sounds": {},
   "focusflow_custom_applied_dates": {},
-  "focusflow_last_intro_time": "1794589375853",
-  "focusflow_active_note_id": null,
+  "focusflow_last_intro_time": "1794589567624",
+  "focusflow_active_note_id": "49ty0i3k9mvfirakt",
   "focusflow_active_planner_timer": null,
-  "_last_modified": 1794589453978
+  "_last_modified": 1794592635409
 }

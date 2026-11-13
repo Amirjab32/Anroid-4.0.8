@@ -38,6 +38,8 @@ export function apiUrl(path: string): string {
 
 /// کلید وضعیت تغییرات ارسال‌نشده محلی در حافظه پایدار مرورگر
 const HAS_UNPUSHED_CHANGES_KEY = "focusflow_has_unpushed_changes";
+/// کلید قفل ارسال اجباری پس از وارد کردن بکاپ دستی (برای جلوگیری از بازگشت داده‌های قدیمی سرور در حالت آفلاین)
+const FORCE_PUSH_PENDING_KEY = "focusflow_force_push_pending";
 
 // تابع کمکی جهت بررسی خالی بودن دیتابیس ارسالی کلاینت یا سرور
 function isDatabaseEmpty(data: any): boolean {
@@ -125,6 +127,7 @@ class SyncManager {
   private lastSyncedMtime: number = 0;
   private isPushing: boolean = false;
   private isApplyingServerData: boolean = false;
+  private isManualOverrideInProgress: boolean = false;
   private pendingPushTimeout: NodeJS.Timeout | null = null;
   private pollIntervalId: NodeJS.Timeout | null = null;
   private currentStatus: SyncStatus = "idle";
@@ -263,6 +266,9 @@ class SyncManager {
 
   // متد اصلی اعمال دیتای سرور روی لوکال با ایمنی کامل و بدون ایجاد حلقه بازگشتی
   private applyServerToLocal(serverData: any, serverMtime: number): boolean {
+    if (this.isManualOverrideInProgress || localStorage.getItem(FORCE_PUSH_PENDING_KEY) === "true") {
+      return false;
+    }
     this.isApplyingServerData = true;
     try {
       const serverStr = JSON.stringify(serverData);
@@ -296,9 +302,11 @@ class SyncManager {
       const parsedData = JSON.parse(dataStr);
       const isLocalEmpty = isDatabaseEmpty(parsedData);
 
+      const isIntentionalEmptyOverride = force && localStorage.getItem(FORCE_PUSH_PENDING_KEY) === "true";
+
       // محافظت کلاینت: اگر دیتای محلی کلاینت خالی است، هرگز نباید دیتابیس سرور را رونویسی کند
-      // در چنین وضعیتی (مثلاً پنجره ناشناس یا مرورگر تازه) داده‌های سرور بازیابی می‌شوند
-      if (isLocalEmpty) {
+      // مگر آنکه کاربر عمداً یک بکاپ دستی خالی را جایگزین کرده باشد
+      if (isLocalEmpty && !isIntentionalEmptyOverride) {
         console.warn("Sync: Local database is empty. Skipping push and restoring from server to protect database.");
         await this.pullFromServer(true);
         return false;
@@ -329,6 +337,7 @@ class SyncManager {
           localStorage.setItem("focusflow_local_mtime", updatedTime.toString());
           this.hasUnsavedLocalChanges = false;
           localStorage.removeItem(HAS_UNPUSHED_CHANGES_KEY);
+          localStorage.removeItem(FORCE_PUSH_PENDING_KEY);
           offlineQueue.clearQueue().catch(() => {});
           this.setStatus("connected");
           return true;
@@ -362,60 +371,85 @@ class SyncManager {
 
   // اعمال اجباری فایل اطلاعات به حافظه محلی و سرور
   public async applyManualDatabaseOverride(jsonString: string): Promise<boolean> {
+    if (this.pendingPushTimeout) {
+      clearTimeout(this.pendingPushTimeout);
+      this.pendingPushTimeout = null;
+    }
+
+    this.isManualOverrideInProgress = true;
     this.setStatus("syncing");
 
-    const now = Date.now();
-    localStorage.setItem("focusflow_local_mtime", now.toString());
-
-    const success = importDatabase(jsonString, true);
-    if (!success) {
-      this.setStatus(this.currentStatus);
-      return false;
-    }
-
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("focusflow-data-changed", { detail: { key: "database_import" } }));
-      window.dispatchEvent(new CustomEvent("focusflow-db-synced"));
-    }
-
     try {
-      await LocalSnapshotService.createSnapshot(true);
-    } catch (e) {
-      console.warn("Failed to create snapshot during manual override:", e);
-    }
+      const prevLocalMtime = getLocalModifiedTime() || 0;
+      const now = Math.max(Date.now(), prevLocalMtime + 1, this.lastSyncedMtime + 1);
 
-    try {
+      const success = importDatabase(jsonString, true);
+      if (!success) {
+        this.setStatus(this.currentStatus);
+        return false;
+      }
+
+      localStorage.setItem("focusflow_local_mtime", now.toString());
+      localStorage.setItem(HAS_UNPUSHED_CHANGES_KEY, "true");
+      localStorage.setItem(FORCE_PUSH_PENDING_KEY, "true");
+      this.hasUnsavedLocalChanges = true;
+
+      // گرفتن تصویر فوری و قطعی پیش از هرگونه عملیات ناهمزمان
       const dataStr = exportDatabase();
       const parsedData = JSON.parse(dataStr);
       parsedData._last_modified = now;
 
-      const response = await fetch(apiUrl("/api/db?force=true"), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ data: parsedData }),
-      });
-
-      if (response.ok) {
-        const resBody = await response.json();
-        if (resBody.success) {
-          const updatedTime = Number(resBody.lastUpdated) || now;
-          this.lastSyncedMtime = updatedTime;
-          localStorage.setItem("focusflow_last_synced_mtime", updatedTime.toString());
-          localStorage.setItem("focusflow_local_mtime", updatedTime.toString());
-          this.hasUnsavedLocalChanges = false;
-          localStorage.removeItem(HAS_UNPUSHED_CHANGES_KEY);
-          this.setStatus("connected");
-        }
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("focusflow-data-changed", { detail: { key: "database_import" } }));
+        window.dispatchEvent(new CustomEvent("focusflow-db-synced"));
       }
-    } catch (err) {
-      console.warn("Sync: Server unreachable during manual override, local storage forcefully updated.", err);
-      this.hasUnsavedLocalChanges = true;
-      localStorage.setItem(HAS_UNPUSHED_CHANGES_KEY, "true");
-    }
 
-    return true;
+      try {
+        await LocalSnapshotService.createSnapshot(true);
+      } catch (e) {
+        console.warn("Failed to create snapshot during manual override:", e);
+      }
+
+      try {
+        const response = await fetch(apiUrl("/api/db?force=true"), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          cache: "no-store",
+          body: JSON.stringify({ data: parsedData }),
+        });
+
+        if (response.ok) {
+          const resBody = await response.json();
+          if (resBody.success) {
+            const updatedTime = Math.max(Number(resBody.lastUpdated) || now, now);
+            this.lastSyncedMtime = updatedTime;
+            localStorage.setItem("focusflow_last_synced_mtime", updatedTime.toString());
+            localStorage.setItem("focusflow_local_mtime", updatedTime.toString());
+            this.hasUnsavedLocalChanges = false;
+            localStorage.removeItem(HAS_UNPUSHED_CHANGES_KEY);
+            localStorage.removeItem(FORCE_PUSH_PENDING_KEY);
+            offlineQueue.clearQueue().catch(() => {});
+            this.setStatus("connected");
+          } else {
+            this.setStatus("offline");
+          }
+        } else {
+          this.setStatus("offline");
+        }
+      } catch (err) {
+        console.warn("Sync: Server unreachable during manual override, local storage forcefully updated.", err);
+        this.hasUnsavedLocalChanges = true;
+        localStorage.setItem(HAS_UNPUSHED_CHANGES_KEY, "true");
+        localStorage.setItem(FORCE_PUSH_PENDING_KEY, "true");
+        this.setStatus("offline");
+      }
+
+      return true;
+    } finally {
+      this.isManualOverrideInProgress = false;
+    }
   }
 
   // پاک کردن دیتابیس محلی و ارسال دیتابیس خالی به سرور جهت ریست همه دستگاه‌ها به صورت هماهنگ
@@ -429,6 +463,7 @@ class SyncManager {
     this.lastSyncedMtime = 0;
     this.hasUnsavedLocalChanges = false;
     localStorage.removeItem(HAS_UNPUSHED_CHANGES_KEY);
+    localStorage.removeItem(FORCE_PUSH_PENDING_KEY);
     offlineQueue.clearQueue().catch(() => {});
 
     try {
@@ -465,12 +500,20 @@ class SyncManager {
    *    که در آن حالت دیتای سرور بازیابی می‌شود و دیتای خالی دستگاه محلی روی سرور ارسال نمی‌گردد.
    */
   public async reconcileWithServer(): Promise<boolean> {
-    if (this.isPushing || this.isApplyingServerData) return false;
+    if (this.isPushing || this.isApplyingServerData || this.isManualOverrideInProgress) return false;
 
     try {
+      if (localStorage.getItem(FORCE_PUSH_PENDING_KEY) === "true") {
+        return await this.pushLocalToServer(true);
+      }
+
       const response = await fetch(apiUrl(`/api/db?t=${Date.now()}`), { cache: "no-store" });
       if (!response.ok) {
         this.setStatus("offline");
+        return false;
+      }
+
+      if (this.isManualOverrideInProgress || localStorage.getItem(FORCE_PUSH_PENDING_KEY) === "true") {
         return false;
       }
 

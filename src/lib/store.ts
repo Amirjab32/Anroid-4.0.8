@@ -1310,36 +1310,64 @@ export function importDatabase(jsonString: string, forceOverride: boolean = fals
 
     if (parsed["focusflow_active_preset_id"]) {
       localStorage.setItem("focusflow_active_preset_id", parsed["focusflow_active_preset_id"]);
+    } else if (forceOverride) {
+      localStorage.setItem("focusflow_active_preset_id", "default");
     }
 
-    if (parsed["focusflow_safe_mode"]) {
-      localStorage.setItem("focusflow_safe_mode", parsed["focusflow_safe_mode"]);
+    if (parsed["focusflow_safe_mode"] !== undefined) {
+      localStorage.setItem("focusflow_safe_mode", String(parsed["focusflow_safe_mode"]));
+    } else if (forceOverride) {
+      localStorage.setItem("focusflow_safe_mode", "true");
     }
 
     if (parsed["focusflow-theme"]) {
       localStorage.setItem("focusflow-theme", parsed["focusflow-theme"]);
+    } else if (forceOverride) {
+      localStorage.setItem("focusflow-theme", "dark");
     }
 
     // ۱. اعمال و بازنشانی تنظیمات اوقات شرعی
     if (parsed["focusflow_prayer_province"]) {
       localStorage.setItem("focusflow_prayer_province", parsed["focusflow_prayer_province"]);
+    } else if (forceOverride) {
+      localStorage.removeItem("focusflow_prayer_province");
     }
     if (parsed["focusflow_prayer_city"]) {
       localStorage.setItem("focusflow_prayer_city", parsed["focusflow_prayer_city"]);
+    } else if (forceOverride) {
+      localStorage.removeItem("focusflow_prayer_city");
     }
     if (parsed["focusflow_prayer_offset"] !== undefined) {
       localStorage.setItem("focusflow_prayer_offset", String(parsed["focusflow_prayer_offset"]));
+    } else if (forceOverride) {
+      localStorage.removeItem("focusflow_prayer_offset");
     }
 
     // ۲. بازیابی صداهای اختصاصی آلارم در حافظه کش و دیتابیس صوتی IndexedDB
     if (parsed["focusflow_custom_audio_sounds"] && typeof parsed["focusflow_custom_audio_sounds"] === "object") {
       try {
-        localStorage.setItem("focusflow_custom_audio_sounds", JSON.stringify(parsed["focusflow_custom_audio_sounds"]));
-        AudioStorageService.saveAllAudio(parsed["focusflow_custom_audio_sounds"]).catch(() => {});
+        if (forceOverride) {
+          AudioStorageService.replaceAllAudio(parsed["focusflow_custom_audio_sounds"]).catch(() => {});
+        } else {
+          localStorage.setItem("focusflow_custom_audio_sounds", JSON.stringify(parsed["focusflow_custom_audio_sounds"]));
+          AudioStorageService.saveAllAudio(parsed["focusflow_custom_audio_sounds"]).catch(() => {});
+        }
       } catch {}
+    } else if (forceOverride) {
+      AudioStorageService.replaceAllAudio({}).catch(() => {});
     }
 
     // ۳. بازیابی الگوهای اعمال‌شده روی روزهای پلنر
+    if (forceOverride) {
+      const customAppliedKeys: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith("focusflow_custom_applied_")) {
+          customAppliedKeys.push(k);
+        }
+      }
+      customAppliedKeys.forEach((k) => localStorage.removeItem(k));
+    }
     if (parsed["focusflow_custom_applied_dates"] && typeof parsed["focusflow_custom_applied_dates"] === "object") {
       Object.entries(parsed["focusflow_custom_applied_dates"]).forEach(([date, val]) => {
         localStorage.setItem(`focusflow_custom_applied_${date}`, String(val));
@@ -1349,6 +1377,8 @@ export function importDatabase(jsonString: string, forceOverride: boolean = fals
     // ۴. حد نصاب موفقیت پلنر، یادداشت فعال و اینترو
     if (parsed["focusflow_planner_threshold"] !== undefined) {
       localStorage.setItem("focusflow_planner_threshold", String(parsed["focusflow_planner_threshold"]));
+    } else if (forceOverride) {
+      localStorage.removeItem("focusflow_planner_threshold");
     }
     const incomingIntroTs = parseIntroTimestamp(parsed[LAST_INTRO_TIME_KEY]);
     if (forceOverride) {
@@ -1368,6 +1398,8 @@ export function importDatabase(jsonString: string, forceOverride: boolean = fals
     }
     if (parsed["focusflow_active_note_id"]) {
       localStorage.setItem("focusflow_active_note_id", String(parsed["focusflow_active_note_id"]));
+    } else if (forceOverride) {
+      localStorage.removeItem("focusflow_active_note_id");
     }
 
     // ۵. همگام‌سازی بلادرنگ تایمر فعال پلنر
@@ -1393,7 +1425,7 @@ export function importDatabase(jsonString: string, forceOverride: boolean = fals
       }
     }
 
-    if (parsed["_last_modified"]) {
+    if (!forceOverride && parsed["_last_modified"]) {
       const serverTime = parseFloat(String(parsed["_last_modified"]));
       if (!isNaN(serverTime) && serverTime > 0) {
         localStorage.setItem("focusflow_local_mtime", serverTime.toString());

@@ -323,10 +323,11 @@ export default {
         }
 
         const isReset = url.searchParams.get("reset") === "true";
+        const isForce = url.searchParams.get("force") === "true";
         const currentDb = await kvGet(env, "current_db");
 
-        // Server-side empty overwrite guard
-        if (!isReset && currentDb && currentDb.data) {
+        // Server-side empty overwrite guard (bypassed for intentional reset or manual backup override)
+        if (!isReset && !isForce && currentDb && currentDb.data) {
           if (!isDatabaseEmpty(currentDb.data) && isDatabaseEmpty(data)) {
             return jsonResponse(
               {

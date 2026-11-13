@@ -168,6 +168,35 @@ export const AudioStorageService = {
   },
 
   /**
+   * جایگزینی کامل مخزن صداهای سفارشی با داده‌های فایل بکاپ (پاک‌سازی موارد قدیمی)
+   */
+  async replaceAllAudio(records: Record<string, string>): Promise<void> {
+    const safeRecords = records && typeof records === "object" ? records : {};
+
+    if (typeof window !== "undefined" && window.localStorage) {
+      try {
+        if (Object.keys(safeRecords).length > 0) {
+          localStorage.setItem("focusflow_custom_audio_sounds", JSON.stringify(safeRecords));
+        } else {
+          localStorage.removeItem("focusflow_custom_audio_sounds");
+        }
+      } catch {}
+    }
+
+    try {
+      const db = await openAudioDB();
+      const tx = db.transaction(AUDIO_STORE_NAME, "readwrite");
+      const store = tx.objectStore(AUDIO_STORE_NAME);
+      store.clear();
+      for (const [id, dataUrl] of Object.entries(safeRecords)) {
+        if (id && dataUrl) {
+          store.put({ id, dataUrl, updatedAt: Date.now() });
+        }
+      }
+    } catch {}
+  },
+
+  /**
    * حذف فایل صوتی اختصاصی
    */
   async deleteAudio(id: string): Promise<boolean> {

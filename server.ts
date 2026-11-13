@@ -308,10 +308,10 @@ async function startServer() {
       }
 
       // گارد حفاظتی پیشرفته و هوشمند برای جلوگیری از رونویسی دیتابیس معتبر سرور با دیتابیس خالی کلاینت (Incognito / Cache Clear)
-      const { reset } = req.query;
-      const isResetRequest = reset === "true";
+      const { reset, force } = req.query;
+      const isResetOrForceRequest = reset === "true" || force === "true";
 
-      if (!isResetRequest && fs.existsSync(DB_FILE)) {
+      if (!isResetOrForceRequest && fs.existsSync(DB_FILE)) {
         try {
           const currentRaw = fs.readFileSync(DB_FILE, "utf-8");
           if (currentRaw.trim()) {
