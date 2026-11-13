@@ -498,7 +498,7 @@ function AppContent() {
         onClose={() => setMenuOpen(false)} 
         onOpenBackup={() => setIsBackupOpen(true)}
       />
-      <main className="mx-auto max-w-5xl px-4 py-6 flex-1 w-full">
+      <main className={`mx-auto px-4 py-6 flex-1 w-full ${view === "settings" ? "max-w-6xl" : "max-w-5xl"}`}>
         <AnimatePresence mode="wait">
           <motion.div key={view} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.3 }}>
             {view === "tasks" && (

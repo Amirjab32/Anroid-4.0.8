@@ -1,23 +1,22 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Settings,
-  Eye,
-  EyeOff,
+  LayoutGrid,
+  Palette,
+  Flame,
+  Bell,
+  Database,
+  Search,
+  Check,
   ExternalLink,
   Play,
   Sun,
   Moon,
-  ShieldCheck,
-  ShieldAlert,
-  Compass,
-  Bell,
-  Database,
   RotateCcw,
-  Check,
   AlertCircle,
-  Home,
-  Server,
-  Clock,
+  X,
+  EyeOff,
+  LucideIcon,
 } from "lucide-react";
 import { useTheme } from "@/lib/ThemeContext";
 import { useThemeStyles } from "@/lib/useThemeStyles";
@@ -47,48 +46,157 @@ interface Props {
   onOpenBackup: () => void;
 }
 
-function SettingSwitch({
+type CategoryId =
+  | "general"
+  | "menu"
+  | "theme"
+  | "motivation"
+  | "reminders"
+  | "sync";
+
+interface CategoryDef {
+  id: CategoryId;
+  label: string;
+  icon: LucideIcon;
+  keywords: string[];
+}
+
+const CATEGORIES: CategoryDef[] = [
+  {
+    id: "general",
+    label: "عمومی",
+    icon: Settings,
+    keywords: [
+      "عمومی",
+      "صفحه شروع",
+      "پیش فرض",
+      "پیش‌فرض",
+      "اوقات شرعی",
+      "نوار",
+      "حالت اطمینان",
+      "حذف امن",
+      "بازنشانی",
+    ],
+  },
+  {
+    id: "menu",
+    label: "منوی همبرگری",
+    icon: LayoutGrid,
+    keywords: [
+      "منو",
+      "همبرگری",
+      "بخش",
+      "مخفی",
+      "پنهان",
+      ...NAV_ITEMS.map((item) => item.label),
+    ],
+  },
+  {
+    id: "theme",
+    label: "ظاهر و تم",
+    icon: Palette,
+    keywords: ["ظاهر", "تم", "تیره", "روشن", "رنگ", "پوسته"],
+  },
+  {
+    id: "motivation",
+    label: "انگیزه و هدف‌ها",
+    icon: Flame,
+    keywords: [
+      "انگیزه",
+      "انگیزشی",
+      "کنکور",
+      "امتحانات",
+      "نهایی",
+      "تاریخ",
+      "روزشمار",
+      "شروع خودکار",
+    ],
+  },
+  {
+    id: "reminders",
+    label: "اوقات و یادآور",
+    icon: Bell,
+    keywords: [
+      "نماز",
+      "اوقات شرعی",
+      "استان",
+      "شهر",
+      "تعدیل",
+      "یادآور",
+      "مرور فاصله‌دار",
+      "ساعت",
+    ],
+  },
+  {
+    id: "sync",
+    label: "همگام‌سازی و بکاپ",
+    icon: Database,
+    keywords: [
+      "سرور",
+      "همگام",
+      "بکاپ",
+      "پشتیبان",
+      "آدرس",
+      "انتقال",
+      "لپ‌تاپ",
+    ],
+  },
+];
+
+function SettingCheckbox({
   checked,
   onChange,
   label,
-  disabled = false,
-  accentColor = "#6366f1",
+  description,
 }: {
   checked: boolean;
   onChange: () => void;
   label: string;
-  disabled?: boolean;
-  accentColor?: string;
+  description?: string;
 }) {
-  const { isDark } = useThemeStyles();
-  const trackOff = isDark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.18)";
+  const { isDark, fg, fgMuted } = useThemeStyles();
+  const uncheckedBg = isDark ? "rgba(255,255,255,0.05)" : "#ffffff";
+  const uncheckedBorder = isDark ? "rgba(255,255,255,0.26)" : "rgba(0,0,0,0.28)";
 
   return (
     <button
       type="button"
-      role="switch"
+      role="checkbox"
       aria-checked={checked}
       aria-label={label}
-      disabled={disabled}
       onClick={onChange}
-      dir="ltr"
-      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors duration-200 ${
-        disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
-      }`}
-      style={{ backgroundColor: checked ? accentColor : trackOff }}
+      className="flex items-start gap-2.5 text-right cursor-pointer group py-0.5 select-none"
     >
       <span
-        className={`h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-          checked ? "translate-x-5" : "translate-x-0"
-        }`}
-      />
+        className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[4px] border transition-colors"
+        style={{
+          backgroundColor: checked ? "#2589f5" : uncheckedBg,
+          borderColor: checked ? "#2589f5" : uncheckedBorder,
+          color: "#ffffff",
+        }}
+      >
+        {checked && <Check className="h-3.5 w-3.5 stroke-[2.75]" />}
+      </span>
+      <span className="flex flex-col">
+        <span className="text-[13px] font-medium leading-snug" style={{ color: fg }}>
+          {label}
+        </span>
+        {description && (
+          <span className="text-[11px] mt-0.5 leading-relaxed" style={{ color: fgMuted }}>
+            {description}
+          </span>
+        )}
+      </span>
     </button>
   );
 }
 
 export default function SettingsView({ onNavigateView, onOpenBackup }: Props) {
   const { theme, toggleTheme } = useTheme();
-  const { isDark, bg, fg, fgMuted, cardBg, cardBorder, inputBg } = useThemeStyles();
+  const { isDark, bg, fg, fgMuted, cardBorder } = useThemeStyles();
+
+  const [activeCategory, setActiveCategory] = useState<CategoryId>("general");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const [appSettings, setAppSettings] = useState<AppSettings>(() =>
     AppSettingsService.get()
@@ -170,6 +278,26 @@ export default function SettingsView({ onNavigateView, onOpenBackup }: Props) {
   );
   const provinceCities = PrayerSettingsService.getCitiesByProvince(province);
 
+  const normalizedSearch = searchQuery.trim();
+  const matchingCategories = useMemo(() => {
+    if (!normalizedSearch) return CATEGORIES;
+    return CATEGORIES.filter(
+      (cat) =>
+        cat.label.includes(normalizedSearch) ||
+        cat.keywords.some((kw) => kw.includes(normalizedSearch))
+    );
+  }, [normalizedSearch]);
+
+  useEffect(() => {
+    if (
+      normalizedSearch &&
+      matchingCategories.length > 0 &&
+      !matchingCategories.some((c) => c.id === activeCategory)
+    ) {
+      setActiveCategory(matchingCategories[0].id);
+    }
+  }, [normalizedSearch, matchingCategories, activeCategory]);
+
   const handleToggleMenuSection = (id: MainNavId) => {
     const result = AppSettingsService.toggleMenuSection(id);
     if (!result.changed && result.reason === "last_visible") {
@@ -182,22 +310,19 @@ export default function SettingsView({ onNavigateView, onOpenBackup }: Props) {
   };
 
   const handleStartViewChange = (nextView: MainNavId) => {
-    const updated = AppSettingsService.update({ defaultStartView: nextView });
-    setAppSettings(updated);
+    setAppSettings(AppSettingsService.update({ defaultStartView: nextView }));
   };
 
   const handleTogglePrayerBar = () => {
-    const updated = AppSettingsService.update({
-      showPrayerBar: !appSettings.showPrayerBar,
-    });
-    setAppSettings(updated);
+    setAppSettings(
+      AppSettingsService.update({ showPrayerBar: !appSettings.showPrayerBar })
+    );
   };
 
   const handleToggleAutoIntro = () => {
-    const updated = AppSettingsService.update({
-      autoShowIntro: !appSettings.autoShowIntro,
-    });
-    setAppSettings(updated);
+    setAppSettings(
+      AppSettingsService.update({ autoShowIntro: !appSettings.autoShowIntro })
+    );
   };
 
   const handleToggleSafeMode = () => {
@@ -282,673 +407,794 @@ export default function SettingsView({ onNavigateView, onOpenBackup }: Props) {
   };
 
   const handleResetSettings = () => {
-    const defaults = AppSettingsService.reset();
-    setAppSettings(defaults);
+    setAppSettings(AppSettingsService.reset());
     setConfirmReset(false);
     setResetDoneMsg(true);
     setTimeout(() => setResetDoneMsg(false), 3500);
   };
 
-  const subtleSurface = isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)";
+  // Palette tuned to match the ShareX desktop settings window while preserving light & dark parity
+  const windowBorder = isDark ? "rgba(255,255,255,0.09)" : cardBorder;
+  const sidebarSurface = isDark ? "#18181b" : "#f4f4f6";
+  const contentSurface = isDark ? "#1f1f22" : "#ffffff";
+  const groupSurface = isDark ? "#252529" : "#fafafa";
+  const controlSurface = isDark ? "#2c2c31" : "#ffffff";
+  const accentBlue = isDark ? "#3898ff" : "#0f6cbd";
+  const activeNavBg = "#0f6cbd";
+
+  const currentCategoryDef =
+    CATEGORIES.find((c) => c.id === activeCategory) || CATEGORIES[0];
+  const ActiveHeaderIcon = currentCategoryDef.icon;
 
   return (
-    <div className="space-y-6 pb-12" dir="rtl">
-      {/* Header */}
+    <div dir="rtl" className="pb-10">
+      {/* Hidden accessible h1 for top-level document heading */}
+      <h1 className="sr-only">تنظیمات</h1>
+
       <div
-        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b pb-5"
-        style={{ borderColor: cardBorder }}
+        className="rounded-xl border overflow-hidden flex flex-col md:flex-row min-h-[560px]"
+        style={{
+          borderColor: windowBorder,
+          backgroundColor: contentSurface,
+        }}
       >
-        <div className="flex items-start gap-3 text-right">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-400 border border-indigo-500/20">
-            <Settings className="h-5 w-5" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight" style={{ color: fg }}>
-              تنظیمات
-            </h1>
-            <p className="text-sm mt-1 leading-relaxed" style={{ color: fgMuted }}>
-              مدیریت بخش‌های منوی همبرگری، صفحه شروع، ظاهر برنامه، اوقات شرعی و همگام‌سازی بین دستگاه‌ها
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 self-start sm:self-center">
-          {resetDoneMsg && (
-            <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-500">
-              <Check className="h-4 w-4" />
-              بازنشانی انجام شد
-            </span>
-          )}
-          {!confirmReset ? (
-            <button
-              type="button"
-              onClick={() => setConfirmReset(true)}
-              className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold border transition-colors hover:bg-white/5 cursor-pointer"
-              style={{ borderColor: cardBorder, color: fgMuted }}
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-              <span>بازنشانی تنظیمات</span>
-            </button>
-          ) : (
-            <div className="flex items-center gap-2">
+        {/* Right Sidebar Category Menu (first child in RTL renders on the right) */}
+        <aside
+          className="w-full md:w-60 shrink-0 border-b md:border-b-0 md:border-l p-3 flex flex-col gap-3"
+          style={{
+            backgroundColor: sidebarSurface,
+            borderColor: windowBorder,
+          }}
+        >
+          {/* Search box */}
+          <div className="relative">
+            <Search
+              className="h-4 w-4 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+              style={{ color: fgMuted }}
+            />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="جستجو در تنظیمات..."
+              aria-label="جستجو در تنظیمات"
+              className="w-full rounded-lg pr-9 pl-8 py-2 text-xs border outline-none focus:ring-2 focus:ring-sky-500/60"
+              style={{
+                backgroundColor: controlSurface,
+                borderColor: windowBorder,
+                color: fg,
+              }}
+            />
+            {searchQuery && (
               <button
                 type="button"
-                onClick={handleResetSettings}
-                className="rounded-xl bg-rose-500 hover:bg-rose-600 text-white px-3.5 py-2 text-xs font-bold transition-colors cursor-pointer"
+                onClick={() => setSearchQuery("")}
+                aria-label="پاک کردن جستجو"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-white/10 cursor-pointer"
+                style={{ color: fgMuted }}
               >
-                تایید بازنشانی
+                <X className="h-3.5 w-3.5" />
               </button>
-              <button
-                type="button"
-                onClick={() => setConfirmReset(false)}
-                className="rounded-xl px-3 py-2 text-xs font-semibold border transition-colors hover:bg-white/5 cursor-pointer"
-                style={{ borderColor: cardBorder, color: fg }}
-              >
-                انصراف
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Section 1: Menu Sections Management */}
-      <section
-        className="rounded-2xl p-5 sm:p-6 border space-y-5"
-        style={{ backgroundColor: cardBg, borderColor: cardBorder }}
-      >
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <div>
-            <h2 className="text-base font-bold flex items-center gap-2" style={{ color: fg }}>
-              <Eye className="h-4 w-4 text-indigo-400" />
-              <span>مدیریت بخش‌های منوی همبرگری</span>
-            </h2>
-            <p className="text-xs mt-1 leading-relaxed" style={{ color: fgMuted }}>
-              با خاموش کردن هر بخش، فقط از منوی همبرگری مخفی می‌شود و اطلاعات آن دست‌نخورده باقی می‌ماند. بخش‌های مخفی همیشه از همین صفحه قابل باز کردن هستند.
-            </p>
+            )}
           </div>
-          <div
-            className="text-xs font-semibold tabular-nums shrink-0"
-            style={{ color: fgMuted }}
+
+          {/* Vertical category menu (horizontal scrollable strip on narrow screens) */}
+          <nav
+            aria-label="دسته‌بندی تنظیمات"
+            className="flex flex-row md:flex-col gap-1 overflow-x-auto md:overflow-visible pb-1 md:pb-0"
           >
-            {toPersianDigits(visibleItems.length)} از {toPersianDigits(NAV_ITEMS.length)} بخش فعال در منو
+            {matchingCategories.length === 0 ? (
+              <div className="px-3 py-2 text-xs" style={{ color: fgMuted }}>
+                موردی یافت نشد
+              </div>
+            ) : (
+              matchingCategories.map((cat) => {
+                const Icon = cat.icon;
+                const isActive = cat.id === activeCategory;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    data-settings-category={cat.id}
+                    onClick={() => setActiveCategory(cat.id)}
+                    className={`flex items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium transition-colors cursor-pointer shrink-0 md:w-full text-right ${
+                      isActive ? "" : "hover:bg-white/5"
+                    }`}
+                    style={
+                      isActive
+                        ? { backgroundColor: activeNavBg, color: "#ffffff" }
+                        : { color: isDark ? "#d4d4d8" : "#3f3f46" }
+                    }
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{cat.label}</span>
+                  </button>
+                );
+              })
+            )}
+          </nav>
+        </aside>
+
+        {/* Left Settings Content Pane */}
+        <div className="flex-1 min-w-0 p-4 sm:p-6 space-y-5">
+          {/* Category Page Heading */}
+          <div className="flex items-center justify-between gap-3">
+            <div
+              className="flex items-center gap-2 text-lg font-bold"
+              style={{ color: accentBlue }}
+            >
+              <ActiveHeaderIcon className="h-5 w-5 shrink-0" />
+              <h2>{currentCategoryDef.label}</h2>
+            </div>
+
+            {activeCategory === "menu" && (
+              <span
+                className="text-xs font-medium tabular-nums"
+                style={{ color: fgMuted }}
+              >
+                {toPersianDigits(visibleItems.length)} از{" "}
+                {toPersianDigits(NAV_ITEMS.length)} فعال
+              </span>
+            )}
           </div>
-        </div>
 
-        {menuGuardNotice && (
-          <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs font-semibold text-amber-400">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>{menuGuardNotice}</span>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const isHidden = appSettings.hiddenMenuIds.includes(item.id);
-            const isLastVisible = !isHidden && visibleItems.length <= 1;
-
-            return (
-              <div
-                key={item.id}
-                className="flex flex-col justify-between gap-3 rounded-xl p-4 border transition-colors"
+          {/* 1. General Category */}
+          {activeCategory === "general" && (
+            <div className="space-y-4">
+              <section
+                className="rounded-lg border p-4 sm:p-5 space-y-4"
                 style={{
-                  borderColor: isHidden
-                    ? cardBorder
-                    : isDark
-                    ? "rgba(99,102,241,0.28)"
-                    : "rgba(99,102,241,0.25)",
-                  backgroundColor: isHidden ? subtleSurface : cardBg,
-                  opacity: isHidden ? 0.85 : 1,
+                  backgroundColor: groupSurface,
+                  borderColor: windowBorder,
                 }}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-2.5 min-w-0">
-                    <div
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
-                      style={{
-                        backgroundColor: isHidden
-                          ? "rgba(128,128,128,0.12)"
-                          : "rgba(99,102,241,0.14)",
-                        color: isHidden ? fgMuted : "#818cf8",
-                      }}
-                    >
-                      <Icon className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-sm font-bold truncate" style={{ color: fg }}>
-                        {item.label}
-                      </div>
-                      <p
-                        className="text-[11px] leading-relaxed mt-0.5 line-clamp-2"
-                        style={{ color: fgMuted }}
+                <h3 className="text-sm font-bold" style={{ color: fg }}>
+                  برنامه و صفحه شروع
+                </h3>
+
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                  <label
+                    htmlFor="settings-default-start-view"
+                    className="text-[13px] sm:w-44 shrink-0"
+                    style={{ color: fg }}
+                  >
+                    صفحه شروع پیش‌فرض:
+                  </label>
+                  <select
+                    id="settings-default-start-view"
+                    value={appSettings.defaultStartView}
+                    onChange={(e) =>
+                      handleStartViewChange(e.target.value as MainNavId)
+                    }
+                    className="w-full sm:w-64 rounded-md px-3 py-1.5 text-[13px] border outline-none focus:ring-2 focus:ring-sky-500/60 cursor-pointer"
+                    style={{
+                      backgroundColor: controlSurface,
+                      borderColor: windowBorder,
+                      color: fg,
+                    }}
+                  >
+                    {visibleItems.map((item) => (
+                      <option
+                        key={item.id}
+                        value={item.id}
+                        style={{ backgroundColor: bg, color: fg }}
                       >
-                        {item.description}
-                      </p>
-                    </div>
-                  </div>
-                  <SettingSwitch
-                    checked={!isHidden}
-                    onChange={() => handleToggleMenuSection(item.id)}
-                    label={`نمایش ${item.label} در منو`}
-                    disabled={false}
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-2.5 pt-1">
+                  <SettingCheckbox
+                    checked={appSettings.showPrayerBar}
+                    onChange={handleTogglePrayerBar}
+                    label="نمایش نوار اوقات شرعی"
+                    description="نمایش نوار زمان نماز بعدی و تایم‌لاین اوقات شرعی در بالای صفحه"
+                  />
+                  <SettingCheckbox
+                    checked={safeMode}
+                    onChange={handleToggleSafeMode}
+                    label="حالت اطمینان (تایید پیش از حذف)"
+                    description="درخواست تایید پیش از حذف تسک‌ها، عادت‌ها و یادداشت‌ها"
                   />
                 </div>
+              </section>
 
-                <div
-                  className="flex items-center justify-between pt-2 border-t text-[11px]"
-                  style={{ borderColor: cardBorder }}
+              <section
+                className="rounded-lg border p-4 sm:p-5 space-y-3"
+                style={{
+                  backgroundColor: groupSurface,
+                  borderColor: windowBorder,
+                }}
+              >
+                <h3 className="text-sm font-bold" style={{ color: fg }}>
+                  بازنشانی
+                </h3>
+                <p className="text-xs leading-relaxed" style={{ color: fgMuted }}>
+                  بازگردانی نمایش بخش‌های منو، صفحه شروع، نوار اوقات شرعی و نمایش خودکار صفحه انگیزشی به تنظیمات پیش‌فرض.
+                </p>
+
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  {!confirmReset ? (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmReset(true)}
+                      className="inline-flex items-center gap-2 rounded-md px-3.5 py-2 text-xs font-semibold border transition-colors hover:bg-white/5 cursor-pointer"
+                      style={{
+                        backgroundColor: controlSurface,
+                        borderColor: windowBorder,
+                        color: fg,
+                      }}
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      <span>بازنشانی تنظیمات پیش‌فرض...</span>
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleResetSettings}
+                        className="rounded-md bg-rose-600 hover:bg-rose-700 text-white px-3.5 py-2 text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        تایید بازنشانی
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmReset(false)}
+                        className="rounded-md px-3 py-2 text-xs font-semibold border transition-colors hover:bg-white/5 cursor-pointer"
+                        style={{
+                          backgroundColor: controlSurface,
+                          borderColor: windowBorder,
+                          color: fg,
+                        }}
+                      >
+                        انصراف
+                      </button>
+                    </>
+                  )}
+                  {resetDoneMsg && (
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-500">
+                      <Check className="h-3.5 w-3.5" />
+                      بازنشانی انجام شد
+                    </span>
+                  )}
+                </div>
+              </section>
+            </div>
+          )}
+
+          {/* 2. Hamburger Menu Management Category */}
+          {activeCategory === "menu" && (
+            <div className="space-y-4">
+              <section
+                className="rounded-lg border p-4 sm:p-5 space-y-3.5"
+                style={{
+                  backgroundColor: groupSurface,
+                  borderColor: windowBorder,
+                }}
+              >
+                <div>
+                  <h3 className="text-sm font-bold" style={{ color: fg }}>
+                    بخش‌های نمایش‌داده‌شده در منوی همبرگری
+                  </h3>
+                  <p className="text-xs mt-1 leading-relaxed" style={{ color: fgMuted }}>
+                    تیک هر بخش را بردارید تا فقط از منوی همبرگری مخفی شود؛ اطلاعات شما حفظ شده و از همین لیست یا بخش زیر قابل باز کردن است.
+                  </p>
+                </div>
+
+                {menuGuardNotice && (
+                  <div className="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-400">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <span>{menuGuardNotice}</span>
+                  </div>
+                )}
+
+                <div className="divide-y" style={{ borderColor: windowBorder }}>
+                  {NAV_ITEMS.map((item) => {
+                    const Icon = item.icon;
+                    const isHidden = appSettings.hiddenMenuIds.includes(item.id);
+                    const isChecked = !isHidden;
+
+                    return (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between gap-3 py-2.5 first:pt-1 last:pb-1"
+                        style={{ borderColor: windowBorder }}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <SettingCheckbox
+                            checked={isChecked}
+                            onChange={() => handleToggleMenuSection(item.id)}
+                            label={`نمایش ${item.label} در منو`}
+                          />
+                          <Icon
+                            className="h-3.5 w-3.5 shrink-0 hidden sm:block"
+                            style={{ color: fgMuted }}
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => onNavigateView(item.id)}
+                          className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold border transition-colors hover:bg-white/5 cursor-pointer shrink-0"
+                          style={{
+                            backgroundColor: controlSurface,
+                            borderColor: windowBorder,
+                            color: isHidden ? accentBlue : fgMuted,
+                          }}
+                        >
+                          <span>باز کردن</span>
+                          <ExternalLink className="h-3 w-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              {hiddenItems.length > 0 && (
+                <section
+                  className="rounded-lg border p-4 sm:p-5 space-y-3"
+                  style={{
+                    backgroundColor: groupSurface,
+                    borderColor: windowBorder,
+                  }}
                 >
-                  <span style={{ color: isHidden ? fgMuted : "#818cf8" }}>
-                    {isHidden
-                      ? "مخفی از منوی همبرگری"
-                      : isLastVisible
-                      ? "تنها بخش فعال منو"
-                      : "نمایش در منو"}
+                  <div className="flex items-center gap-2 text-sm font-bold" style={{ color: fg }}>
+                    <EyeOff className="h-4 w-4 text-amber-400" />
+                    <span>
+                      بخش‌های پنهان‌شده ({toPersianDigits(hiddenItems.length)})
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {hiddenItems.map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <div
+                          key={item.id}
+                          className="flex items-center gap-2 rounded-md px-3 py-1.5 border text-xs"
+                          style={{
+                            borderColor: windowBorder,
+                            backgroundColor: controlSurface,
+                          }}
+                        >
+                          <Icon
+                            className="h-3.5 w-3.5 shrink-0"
+                            style={{ color: accentBlue }}
+                          />
+                          <span className="font-semibold" style={{ color: fg }}>
+                            {item.label}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => onNavigateView(item.id)}
+                            className="rounded px-2 py-0.5 text-[11px] font-bold text-white cursor-pointer"
+                            style={{ backgroundColor: activeNavBg }}
+                          >
+                            ورود
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleMenuSection(item.id)}
+                            className="rounded px-1.5 py-0.5 text-[11px] font-semibold hover:bg-white/10 cursor-pointer"
+                            style={{ color: fgMuted }}
+                          >
+                            بازگردانی
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+            </div>
+          )}
+
+          {/* 3. Theme & Appearance Category */}
+          {activeCategory === "theme" && (
+            <div className="space-y-4">
+              <section
+                className="rounded-lg border p-4 sm:p-5 space-y-4"
+                style={{
+                  backgroundColor: groupSurface,
+                  borderColor: windowBorder,
+                }}
+              >
+                <h3 className="text-sm font-bold" style={{ color: fg }}>
+                  انتخاب پوسته ظاهری
+                </h3>
+
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                  <span className="text-[13px] sm:w-44 shrink-0" style={{ color: fg }}>
+                    تم برنامه:
                   </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleThemeSwitch("dark")}
+                      className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-xs font-bold border transition-colors cursor-pointer"
+                      style={
+                        theme === "dark"
+                          ? {
+                              backgroundColor: activeNavBg,
+                              borderColor: activeNavBg,
+                              color: "#ffffff",
+                            }
+                          : {
+                              backgroundColor: controlSurface,
+                              borderColor: windowBorder,
+                              color: fgMuted,
+                            }
+                      }
+                    >
+                      <Moon className="h-3.5 w-3.5" />
+                      <span>حالت تیره</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleThemeSwitch("light")}
+                      className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-xs font-bold border transition-colors cursor-pointer"
+                      style={
+                        theme === "light"
+                          ? {
+                              backgroundColor: activeNavBg,
+                              borderColor: activeNavBg,
+                              color: "#ffffff",
+                            }
+                          : {
+                              backgroundColor: controlSurface,
+                              borderColor: windowBorder,
+                              color: fgMuted,
+                            }
+                      }
+                    >
+                      <Sun className="h-3.5 w-3.5" />
+                      <span>حالت روشن</span>
+                    </button>
+                  </div>
+                </div>
+              </section>
+            </div>
+          )}
+
+          {/* 4. Motivation & Target Dates Category */}
+          {activeCategory === "motivation" && (
+            <div className="space-y-4">
+              <section
+                className="rounded-lg border p-4 sm:p-5 space-y-3.5"
+                style={{
+                  backgroundColor: groupSurface,
+                  borderColor: windowBorder,
+                }}
+              >
+                <h3 className="text-sm font-bold" style={{ color: fg }}>
+                  صفحه شروع انگیزشی
+                </h3>
+
+                <SettingCheckbox
+                  checked={appSettings.autoShowIntro}
+                  onChange={handleToggleAutoIntro}
+                  label="نمایش خودکار صفحه انگیزشی (هر ۳ ساعت)"
+                  description="در صورت غیرفعال کردن، صفحه انگیزشی به صورت خودکار باز نمی‌شود ولی همچنان به صورت دستی قابل اجرا است"
+                />
+
+                <div className="pt-1">
                   <button
                     type="button"
-                    onClick={() => onNavigateView(item.id)}
-                    className="inline-flex items-center gap-1 font-semibold hover:underline cursor-pointer text-indigo-400"
+                    onClick={() =>
+                      window.dispatchEvent(new CustomEvent("trigger-intro-overlay"))
+                    }
+                    className="inline-flex items-center gap-2 rounded-md px-3.5 py-2 text-xs font-semibold border transition-colors hover:bg-white/5 cursor-pointer"
+                    style={{
+                      backgroundColor: controlSurface,
+                      borderColor: windowBorder,
+                      color: fg,
+                    }}
                   >
-                    <span>باز کردن</span>
-                    <ExternalLink className="h-3 w-3" />
+                    <Play className="h-3.5 w-3.5 fill-current" />
+                    <span>اجرای فوری صفحه انگیزشی</span>
                   </button>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              </section>
 
-        {/* Dedicated access bar for hidden sections */}
-        {hiddenItems.length > 0 && (
-          <div
-            className="rounded-xl p-4 border space-y-3"
-            style={{ borderColor: cardBorder, backgroundColor: subtleSurface }}
-          >
-            <div className="flex items-center gap-2 text-xs font-bold" style={{ color: fg }}>
-              <EyeOff className="h-4 w-4 text-amber-400" />
-              <span>
-                بخش‌های پنهان‌شده ({toPersianDigits(hiddenItems.length)})
-              </span>
+              <section
+                className="rounded-lg border p-4 sm:p-5 space-y-4"
+                style={{
+                  backgroundColor: groupSurface,
+                  borderColor: windowBorder,
+                }}
+              >
+                <h3 className="text-sm font-bold" style={{ color: fg }}>
+                  تاریخ‌های هدف
+                </h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <ShamsiDatePicker
+                    label="تاریخ کنکور سراسری"
+                    value={konkurDate}
+                    onChange={(val) => {
+                      setKonkurDate(val);
+                      MotivationStore.setKonkurDate(val);
+                    }}
+                    accentColorClass="indigo"
+                  />
+                  <ShamsiDatePicker
+                    label="تاریخ امتحانات نهایی"
+                    value={finalExamsDate}
+                    onChange={(val) => {
+                      setFinalExamsDate(val);
+                      MotivationStore.setFinalExamsDate(val);
+                    }}
+                    accentColorClass="amber"
+                  />
+                </div>
+              </section>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {hiddenItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <div
-                    key={item.id}
-                    className="flex items-center gap-2 rounded-xl px-3 py-2 border text-xs"
-                    style={{ borderColor: cardBorder, backgroundColor: bg }}
+          )}
+
+          {/* 5. Prayer Times & SRS Reminder Category */}
+          {activeCategory === "reminders" && (
+            <div className="space-y-4">
+              <section
+                className="rounded-lg border p-4 sm:p-5 space-y-4"
+                style={{
+                  backgroundColor: groupSurface,
+                  borderColor: windowBorder,
+                }}
+              >
+                <h3 className="text-sm font-bold" style={{ color: fg }}>
+                  موقعیت و زمان اوقات شرعی
+                </h3>
+
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                  <label
+                    htmlFor="settings-prayer-province"
+                    className="text-[13px] sm:w-44 shrink-0"
+                    style={{ color: fg }}
                   >
-                    <Icon className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
-                    <span className="font-semibold" style={{ color: fg }}>
-                      {item.label}
+                    استان:
+                  </label>
+                  <select
+                    id="settings-prayer-province"
+                    value={province}
+                    onChange={(e) => handleProvinceChange(e.target.value)}
+                    className="w-full sm:w-64 rounded-md px-3 py-1.5 text-[13px] border outline-none focus:ring-2 focus:ring-sky-500/60 cursor-pointer"
+                    style={{
+                      backgroundColor: controlSurface,
+                      borderColor: windowBorder,
+                      color: fg,
+                    }}
+                  >
+                    {IRAN_PROVINCES.map((p) => (
+                      <option
+                        key={p}
+                        value={p}
+                        style={{ backgroundColor: bg, color: fg }}
+                      >
+                        {p}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                  <label
+                    htmlFor="settings-prayer-city"
+                    className="text-[13px] sm:w-44 shrink-0"
+                    style={{ color: fg }}
+                  >
+                    شهر:
+                  </label>
+                  <select
+                    id="settings-prayer-city"
+                    value={city}
+                    onChange={(e) => handleCityChange(e.target.value)}
+                    className="w-full sm:w-64 rounded-md px-3 py-1.5 text-[13px] border outline-none focus:ring-2 focus:ring-sky-500/60 cursor-pointer"
+                    style={{
+                      backgroundColor: controlSurface,
+                      borderColor: windowBorder,
+                      color: fg,
+                    }}
+                  >
+                    {provinceCities.map((c) => (
+                      <option
+                        key={c.name}
+                        value={c.name}
+                        style={{ backgroundColor: bg, color: fg }}
+                      >
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                  <span className="text-[13px] sm:w-44 shrink-0" style={{ color: fg }}>
+                    تعدیل دستی زمان (دقیقه):
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOffsetChange(-1)}
+                      aria-label="کاهش یک دقیقه"
+                      className="h-8 w-8 rounded-md border text-sm font-bold transition-colors hover:bg-white/10 cursor-pointer"
+                      style={{
+                        backgroundColor: controlSurface,
+                        borderColor: windowBorder,
+                        color: fg,
+                      }}
+                    >
+                      -
+                    </button>
+                    <span
+                      className="min-w-[3rem] text-center text-sm font-bold tabular-nums"
+                      style={{ color: fg }}
+                    >
+                      {prayerOffset > 0
+                        ? `+${toPersianDigits(prayerOffset)}`
+                        : toPersianDigits(prayerOffset)}
                     </span>
                     <button
                       type="button"
-                      onClick={() => onNavigateView(item.id)}
-                      className="rounded-lg bg-indigo-500/15 text-indigo-400 hover:bg-indigo-500/25 px-2.5 py-1 text-[11px] font-bold transition-colors cursor-pointer"
+                      onClick={() => handleOffsetChange(1)}
+                      aria-label="افزایش یک دقیقه"
+                      className="h-8 w-8 rounded-md border text-sm font-bold transition-colors hover:bg-white/10 cursor-pointer"
+                      style={{
+                        backgroundColor: controlSurface,
+                        borderColor: windowBorder,
+                        color: fg,
+                      }}
                     >
-                      ورود
+                      +
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              <section
+                className="rounded-lg border p-4 sm:p-5 space-y-4"
+                style={{
+                  backgroundColor: groupSurface,
+                  borderColor: windowBorder,
+                }}
+              >
+                <h3 className="text-sm font-bold" style={{ color: fg }}>
+                  یادآور مرور فاصله‌دار
+                </h3>
+
+                <SettingCheckbox
+                  checked={Boolean(srsReminder.enabled)}
+                  onChange={handleToggleSrsReminder}
+                  label="فعال‌سازی یادآور روزانه مرور فاصله‌دار"
+                />
+
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                  <label
+                    htmlFor="settings-srs-time"
+                    className="text-[13px] sm:w-44 shrink-0"
+                    style={{ color: fg }}
+                  >
+                    ساعت یادآوری:
+                  </label>
+                  <input
+                    id="settings-srs-time"
+                    type="time"
+                    dir="ltr"
+                    value={srsReminder.time || "20:00"}
+                    onChange={(e) => handleSrsTimeChange(e.target.value)}
+                    className="w-full sm:w-44 rounded-md px-3 py-1.5 text-[13px] border outline-none focus:ring-2 focus:ring-sky-500/60 tabular-nums"
+                    style={{
+                      backgroundColor: controlSurface,
+                      borderColor: windowBorder,
+                      color: fg,
+                    }}
+                  />
+                </div>
+              </section>
+            </div>
+          )}
+
+          {/* 6. Sync & Backup Category */}
+          {activeCategory === "sync" && (
+            <div className="space-y-4">
+              <section
+                className="rounded-lg border p-4 sm:p-5 space-y-4"
+                style={{
+                  backgroundColor: groupSurface,
+                  borderColor: windowBorder,
+                }}
+              >
+                <h3 className="text-sm font-bold" style={{ color: fg }}>
+                  آدرس سرور همگام‌سازی اختصاصی
+                </h3>
+
+                <div className="space-y-2.5">
+                  <label
+                    htmlFor="settings-server-url"
+                    className="block text-xs"
+                    style={{ color: fgMuted }}
+                  >
+                    در صورت استفاده از سرور دلخواه آدرس را وارد کنید (اختیاری):
+                  </label>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      id="settings-server-url"
+                      type="url"
+                      dir="ltr"
+                      value={serverUrl}
+                      onChange={(e) => setServerUrl(e.target.value)}
+                      placeholder={DEFAULT_CLOUDFLARE_URL}
+                      className="flex-1 rounded-md px-3 py-1.5 text-[13px] border outline-none focus:ring-2 focus:ring-sky-500/60"
+                      style={{
+                        backgroundColor: controlSurface,
+                        borderColor: windowBorder,
+                        color: fg,
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSaveServerUrl}
+                      className="rounded-md text-white px-4 py-1.5 text-xs font-bold transition-colors cursor-pointer shrink-0"
+                      style={{ backgroundColor: activeNavBg }}
+                    >
+                      ذخیره آدرس
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleToggleMenuSection(item.id)}
-                      className="rounded-lg px-2 py-1 text-[11px] font-semibold transition-colors hover:bg-white/10 cursor-pointer"
-                      style={{ color: fgMuted }}
+                      onClick={handleResetServerUrl}
+                      className="rounded-md px-3.5 py-1.5 text-xs font-semibold border transition-colors hover:bg-white/5 cursor-pointer shrink-0"
+                      style={{
+                        backgroundColor: controlSurface,
+                        borderColor: windowBorder,
+                        color: fgMuted,
+                      }}
                     >
-                      بازگردانی به منو
+                      پیش‌فرض
                     </button>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* Section 2: Start Page & Motivation / Intro */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <section
-          className="rounded-2xl p-5 sm:p-6 border space-y-5"
-          style={{ backgroundColor: cardBg, borderColor: cardBorder }}
-        >
-          <div>
-            <h2 className="text-base font-bold flex items-center gap-2" style={{ color: fg }}>
-              <Home className="h-4 w-4 text-indigo-400" />
-              <span>صفحه شروع و انگیزه</span>
-            </h2>
-            <p className="text-xs mt-1" style={{ color: fgMuted }}>
-              تعیین صفحه پیش‌فرض هنگام باز کردن برنامه و تنظیمات روزشمار انگیزشی
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label
-                htmlFor="settings-default-start-view"
-                className="block text-xs font-semibold mb-1.5"
-                style={{ color: fg }}
-              >
-                صفحه شروع پیش‌فرض
-              </label>
-              <select
-                id="settings-default-start-view"
-                value={appSettings.defaultStartView}
-                onChange={(e) => handleStartViewChange(e.target.value as MainNavId)}
-                className="w-full rounded-xl px-3.5 py-2.5 text-sm border outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-                style={{ backgroundColor: inputBg, borderColor: cardBorder, color: fg }}
-              >
-                {visibleItems.map((item) => (
-                  <option
-                    key={item.id}
-                    value={item.id}
-                    style={{ backgroundColor: bg, color: fg }}
-                  >
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-              <p className="text-[11px] mt-1" style={{ color: fgMuted }}>
-                در صورت مخفی شدن صفحه شروع فعلی، اولین بخش فعال به عنوان صفحه شروع انتخاب می‌شود.
-              </p>
-            </div>
-
-            <div
-              className="flex items-center justify-between gap-4 rounded-xl p-3.5 border"
-              style={{ borderColor: cardBorder, backgroundColor: subtleSurface }}
-            >
-              <div>
-                <div className="text-sm font-semibold" style={{ color: fg }}>
-                  نمایش خودکار صفحه انگیزشی
+                  {serverFeedback && (
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-500">
+                      <Check className="h-3.5 w-3.5" />
+                      <span>{serverFeedback}</span>
+                    </div>
+                  )}
                 </div>
-                <p className="text-[11px] mt-0.5" style={{ color: fgMuted }}>
-                  پخش یادآور روزشمار کنکور و امتحانات هر ۳ ساعت یک‌بار
-                </p>
-              </div>
-              <SettingSwitch
-                checked={appSettings.autoShowIntro}
-                onChange={handleToggleAutoIntro}
-                label="نمایش خودکار صفحه انگیزشی"
-              />
-            </div>
+              </section>
 
-            <button
-              type="button"
-              onClick={() => window.dispatchEvent(new CustomEvent("trigger-intro-overlay"))}
-              className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 text-xs font-bold transition-colors cursor-pointer"
-            >
-              <Play className="h-3.5 w-3.5 fill-current" />
-              <span>اجرای فوری صفحه انگیزشی</span>
-            </button>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-              <ShamsiDatePicker
-                label="تاریخ کنکور سراسری"
-                value={konkurDate}
-                onChange={(val) => {
-                  setKonkurDate(val);
-                  MotivationStore.setKonkurDate(val);
+              <section
+                className="rounded-lg border p-4 sm:p-5 space-y-3"
+                style={{
+                  backgroundColor: groupSurface,
+                  borderColor: windowBorder,
                 }}
-                accentColorClass="indigo"
-              />
-              <ShamsiDatePicker
-                label="تاریخ امتحانات نهایی"
-                value={finalExamsDate}
-                onChange={(val) => {
-                  setFinalExamsDate(val);
-                  MotivationStore.setFinalExamsDate(val);
-                }}
-                accentColorClass="amber"
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* Section 3: Appearance & Workspace Safety */}
-        <section
-          className="rounded-2xl p-5 sm:p-6 border space-y-5"
-          style={{ backgroundColor: cardBg, borderColor: cardBorder }}
-        >
-          <div>
-            <h2 className="text-base font-bold flex items-center gap-2" style={{ color: fg }}>
-              {isDark ? (
-                <Moon className="h-4 w-4 text-indigo-400" />
-              ) : (
-                <Sun className="h-4 w-4 text-amber-500" />
-              )}
-              <span>ظاهر و فضای کاری</span>
-            </h2>
-            <p className="text-xs mt-1" style={{ color: fgMuted }}>
-              شخصی‌سازی تم ظاهری، نوار بالایی اوقات شرعی و امنیت حذف داده‌ها
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <div className="text-xs font-semibold mb-2" style={{ color: fg }}>
-                تم ظاهری برنامه
-              </div>
-              <div className="grid grid-cols-2 gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => handleThemeSwitch("dark")}
-                  className="flex items-center justify-center gap-2 rounded-xl py-2.5 px-3 text-xs font-bold border transition-colors cursor-pointer"
-                  style={{
-                    borderColor: theme === "dark" ? "#6366f1" : cardBorder,
-                    backgroundColor:
-                      theme === "dark" ? "rgba(99,102,241,0.16)" : subtleSurface,
-                    color: theme === "dark" ? "#818cf8" : fgMuted,
-                  }}
-                >
-                  <Moon className="h-4 w-4" />
-                  <span>حالت تیره</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleThemeSwitch("light")}
-                  className="flex items-center justify-center gap-2 rounded-xl py-2.5 px-3 text-xs font-bold border transition-colors cursor-pointer"
-                  style={{
-                    borderColor: theme === "light" ? "#f59e0b" : cardBorder,
-                    backgroundColor:
-                      theme === "light" ? "rgba(245,158,11,0.14)" : subtleSurface,
-                    color: theme === "light" ? "#d97706" : fgMuted,
-                  }}
-                >
-                  <Sun className="h-4 w-4" />
-                  <span>حالت روشن</span>
-                </button>
-              </div>
-            </div>
-
-            <div
-              className="flex items-center justify-between gap-4 rounded-xl p-3.5 border"
-              style={{ borderColor: cardBorder, backgroundColor: subtleSurface }}
-            >
-              <div>
-                <div className="text-sm font-semibold" style={{ color: fg }}>
-                  نوار اوقات شرعی در بالای صفحه
-                </div>
-                <p className="text-[11px] mt-0.5" style={{ color: fgMuted }}>
-                  نمایش زمان نماز بعدی و تایم‌لاین اوقات شرعی زیر نوار بالا
+              >
+                <h3 className="text-sm font-bold" style={{ color: fg }}>
+                  مدیریت فایل‌های پشتیبان و انتقال بین دستگاه‌ها
+                </h3>
+                <p className="text-xs leading-relaxed" style={{ color: fgMuted }}>
+                  دریافت خروجی کامل، وارد کردن بکاپ دستی و همگام‌سازی وای‌فای با لپ‌تاپ.
                 </p>
-              </div>
-              <SettingSwitch
-                checked={appSettings.showPrayerBar}
-                onChange={handleTogglePrayerBar}
-                label="نمایش نوار اوقات شرعی"
-              />
-            </div>
-
-            <div
-              className="flex items-center justify-between gap-4 rounded-xl p-3.5 border"
-              style={{ borderColor: cardBorder, backgroundColor: subtleSurface }}
-            >
-              <div className="flex items-start gap-2.5">
-                {safeMode ? (
-                  <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
-                ) : (
-                  <ShieldAlert className="h-4 w-4 text-rose-400 shrink-0 mt-0.5" />
-                )}
-                <div>
-                  <div className="text-sm font-semibold" style={{ color: fg }}>
-                    حالت اطمینان (حذف امن)
-                  </div>
-                  <p className="text-[11px] mt-0.5" style={{ color: fgMuted }}>
-                    درخواست پنجره تایید پیش از حذف تسک‌ها، عادت‌ها و یادداشت‌ها
-                  </p>
-                </div>
-              </div>
-              <SettingSwitch
-                checked={safeMode}
-                onChange={handleToggleSafeMode}
-                label="حالت اطمینان پیش از حذف"
-                accentColor="#10b981"
-              />
-            </div>
-          </div>
-        </section>
-      </div>
-
-      {/* Section 4: Prayer Times & SRS Reminder */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <section
-          className="rounded-2xl p-5 sm:p-6 border space-y-5"
-          style={{ backgroundColor: cardBg, borderColor: cardBorder }}
-        >
-          <div>
-            <h2 className="text-base font-bold flex items-center gap-2" style={{ color: fg }}>
-              <Compass className="h-4 w-4 text-emerald-400" />
-              <span>تنظیمات اوقات شرعی</span>
-            </h2>
-            <p className="text-xs mt-1" style={{ color: fgMuted }}>
-              انتخاب استان، شهر و دقیقه‌ی تعدیل برای محاسبه دقیق اوقات نماز
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label
-                htmlFor="settings-prayer-province"
-                className="block text-xs font-semibold mb-1.5"
-                style={{ color: fg }}
-              >
-                استان
-              </label>
-              <select
-                id="settings-prayer-province"
-                value={province}
-                onChange={(e) => handleProvinceChange(e.target.value)}
-                className="w-full rounded-xl px-3.5 py-2.5 text-sm border outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-                style={{ backgroundColor: inputBg, borderColor: cardBorder, color: fg }}
-              >
-                {IRAN_PROVINCES.map((p) => (
-                  <option key={p} value={p} style={{ backgroundColor: bg, color: fg }}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label
-                htmlFor="settings-prayer-city"
-                className="block text-xs font-semibold mb-1.5"
-                style={{ color: fg }}
-              >
-                شهر
-              </label>
-              <select
-                id="settings-prayer-city"
-                value={city}
-                onChange={(e) => handleCityChange(e.target.value)}
-                className="w-full rounded-xl px-3.5 py-2.5 text-sm border outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-                style={{ backgroundColor: inputBg, borderColor: cardBorder, color: fg }}
-              >
-                {provinceCities.map((c) => (
-                  <option
-                    key={c.name}
-                    value={c.name}
-                    style={{ backgroundColor: bg, color: fg }}
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={onOpenBackup}
+                    className="inline-flex items-center gap-2 rounded-md px-3.5 py-2 text-xs font-semibold border transition-colors hover:bg-white/5 cursor-pointer"
+                    style={{
+                      backgroundColor: controlSurface,
+                      borderColor: windowBorder,
+                      color: fg,
+                    }}
                   >
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div
-            className="flex items-center justify-between gap-4 rounded-xl p-3.5 border"
-            style={{ borderColor: cardBorder, backgroundColor: subtleSurface }}
-          >
-            <div>
-              <div className="text-sm font-semibold" style={{ color: fg }}>
-                تعدیل دستی زمان (دقیقه)
-              </div>
-              <p className="text-[11px] mt-0.5" style={{ color: fgMuted }}>
-                افزودن یا کاستن دقیقه احتیاط از تمام اوقات شرعی
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => handleOffsetChange(-1)}
-                className="h-9 w-9 rounded-lg border text-sm font-bold transition-colors hover:bg-white/10 cursor-pointer"
-                style={{ borderColor: cardBorder, color: fg }}
-                aria-label="کاهش یک دقیقه"
-              >
-                -
-              </button>
-              <span
-                className="min-w-[3.2rem] text-center text-sm font-bold tabular-nums"
-                style={{ color: fg }}
-              >
-                {prayerOffset > 0
-                  ? `+${toPersianDigits(prayerOffset)}`
-                  : toPersianDigits(prayerOffset)}
-              </span>
-              <button
-                type="button"
-                onClick={() => handleOffsetChange(1)}
-                className="h-9 w-9 rounded-lg border text-sm font-bold transition-colors hover:bg-white/10 cursor-pointer"
-                style={{ borderColor: cardBorder, color: fg }}
-                aria-label="افزایش یک دقیقه"
-              >
-                +
-              </button>
-            </div>
-          </div>
-        </section>
-
-        {/* SRS Reminder Settings */}
-        <section
-          className="rounded-2xl p-5 sm:p-6 border space-y-5"
-          style={{ backgroundColor: cardBg, borderColor: cardBorder }}
-        >
-          <div>
-            <h2 className="text-base font-bold flex items-center gap-2" style={{ color: fg }}>
-              <Bell className="h-4 w-4 text-amber-400" />
-              <span>یادآور مرور فاصله‌دار</span>
-            </h2>
-            <p className="text-xs mt-1" style={{ color: fgMuted }}>
-              اعلان روزانه در ساعت مشخص برای یادآوری موضوعات سررسید مرور
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            <div
-              className="flex items-center justify-between gap-4 rounded-xl p-3.5 border"
-              style={{ borderColor: cardBorder, backgroundColor: subtleSurface }}
-            >
-              <div>
-                <div className="text-sm font-semibold" style={{ color: fg }}>
-                  فعال‌سازی یادآور روزانه مرور
+                    <Database className="h-3.5 w-3.5 text-amber-500" />
+                    <span>باز کردن پشتیبان‌گیری و انتقال اطلاعات...</span>
+                  </button>
                 </div>
-                <p className="text-[11px] mt-0.5" style={{ color: fgMuted }}>
-                  ارسال اعلان در صورت وجود مطلب آماده مرور
-                </p>
-              </div>
-              <SettingSwitch
-                checked={Boolean(srsReminder.enabled)}
-                onChange={handleToggleSrsReminder}
-                label="فعال‌سازی یادآور روزانه مرور"
-                accentColor="#f59e0b"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="settings-srs-time"
-                className="flex items-center gap-1.5 text-xs font-semibold mb-1.5"
-                style={{ color: fg }}
-              >
-                <Clock className="h-3.5 w-3.5 text-amber-400" />
-                <span>ساعت یادآوری روزانه</span>
-              </label>
-              <input
-                id="settings-srs-time"
-                type="time"
-                dir="ltr"
-                value={srsReminder.time || "20:00"}
-                onChange={(e) => handleSrsTimeChange(e.target.value)}
-                className="w-full rounded-xl px-3.5 py-2.5 text-sm border outline-none focus:ring-2 focus:ring-indigo-500 tabular-nums"
-                style={{ backgroundColor: inputBg, borderColor: cardBorder, color: fg }}
-              />
-            </div>
-          </div>
-        </section>
-      </div>
-
-      {/* Section 5: Sync Server & Backup */}
-      <section
-        className="rounded-2xl p-5 sm:p-6 border space-y-5"
-        style={{ backgroundColor: cardBg, borderColor: cardBorder }}
-      >
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <h2 className="text-base font-bold flex items-center gap-2" style={{ color: fg }}>
-              <Server className="h-4 w-4 text-indigo-400" />
-              <span>همگام‌سازی و پشتیبان‌گیری</span>
-            </h2>
-            <p className="text-xs mt-1" style={{ color: fgMuted }}>
-              تنظیم آدرس سرور اختصاصی روی این دستگاه و دسترسی سریع به فایل‌های بکاپ
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onOpenBackup}
-            className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold border transition-colors hover:bg-white/5 cursor-pointer self-start sm:self-center"
-            style={{ borderColor: cardBorder, color: fg }}
-          >
-            <Database className="h-4 w-4 text-amber-500" />
-            <span>باز کردن پشتیبان‌گیری و انتقال اطلاعات</span>
-          </button>
-        </div>
-
-        <div className="space-y-2.5">
-          <label
-            htmlFor="settings-server-url"
-            className="block text-xs font-semibold"
-            style={{ color: fg }}
-          >
-            آدرس سرور همگام‌سازی اختصاصی (اختیاری)
-          </label>
-          <div className="flex flex-col sm:flex-row gap-2.5">
-            <input
-              id="settings-server-url"
-              type="url"
-              dir="ltr"
-              value={serverUrl}
-              onChange={(e) => setServerUrl(e.target.value)}
-              placeholder={DEFAULT_CLOUDFLARE_URL}
-              className="flex-1 rounded-xl px-3.5 py-2.5 text-sm border outline-none focus:ring-2 focus:ring-indigo-500"
-              style={{ backgroundColor: inputBg, borderColor: cardBorder, color: fg }}
-            />
-            <button
-              type="button"
-              onClick={handleSaveServerUrl}
-              className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 text-xs font-bold transition-colors cursor-pointer shrink-0"
-            >
-              ذخیره آدرس
-            </button>
-            <button
-              type="button"
-              onClick={handleResetServerUrl}
-              className="rounded-xl px-4 py-2.5 text-xs font-semibold border transition-colors hover:bg-white/5 cursor-pointer shrink-0"
-              style={{ borderColor: cardBorder, color: fgMuted }}
-            >
-              پیش‌فرض
-            </button>
-          </div>
-          {serverFeedback && (
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-500">
-              <Check className="h-3.5 w-3.5" />
-              <span>{serverFeedback}</span>
+              </section>
             </div>
           )}
         </div>
-      </section>
+      </div>
     </div>
   );
 }

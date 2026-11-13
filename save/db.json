@@ -9868,6 +9868,16 @@
     "sound": "study",
     "vibration": "heartbeat"
   },
+  "focusflow_app_settings": {
+    "hiddenMenuIds": [
+      "quiz",
+      "going_up",
+      "motivation"
+    ],
+    "defaultStartView": "tasks",
+    "showPrayerBar": true,
+    "autoShowIntro": true
+  },
   "focusflow_konkur_date": "2027-06-25",
   "focusflow_final_exams_date": "2027-05-20",
   "focusflow_active_preset_id": "qfrma022bmvob2e85",
@@ -9881,5 +9891,5 @@
   "focusflow_last_intro_time": "1794593951737",
   "focusflow_active_note_id": "49ty0i3k9mvfirakt",
   "focusflow_active_planner_timer": null,
-  "_last_modified": 1794594078169
+  "_last_modified": 1794596059578
 }
