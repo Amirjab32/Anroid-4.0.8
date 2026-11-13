@@ -1,5 +1,6 @@
 import { AudioStorageService } from "./audioStorage";
 import { LAST_INTRO_TIME_KEY, parseIntroTimestamp, pickNewestIntroTimestamp } from "./introTiming";
+import { TasksImportMode, filterTasksByTags, mergeImportedTasks } from "./taskExchange";
 
 export interface TaskInterval {
   id: string;
@@ -1424,18 +1425,16 @@ export function confirmAndDelete(title: string, onConfirm: () => void) {
   }
 }
 
-export function exportTasksJSON(tag?: string): string {
-  let tasks = TaskStore.list();
-  if (tag && tag !== "all") {
-    tasks = tasks.filter((t) => t.tags && t.tags.includes(tag));
-  }
+export function exportTasksJSON(tagOrTags?: string | string[]): string {
+  const tasks = filterTasksByTags(TaskStore.list(), tagOrTags);
   return JSON.stringify({ focusflow_tasks: tasks }, null, 2);
 }
 
 export function importTasksJSON(
   jsonString: string,
-  mode: "replace" | "append"
-): { success: boolean; count: number; error?: string } {
+  mode: TasksImportMode,
+  filterTags?: string | string[]
+): { success: boolean; count: number; replacedCount?: number; error?: string } {
   try {
     const parsed = JSON.parse(jsonString);
     let incomingTasks: any[] = [];
@@ -1479,23 +1478,13 @@ export function importTasksJSON(
       reminder_time: t.reminder_time ?? null,
     }));
 
-    if (mode === "replace") {
-      setStore(TASKS_KEY, sanitizedTasks);
-    } else {
-      const currentTasks = getStore<Task>(TASKS_KEY);
-      const existingMap = new Map<string, Task>();
-      for (const t of currentTasks) {
-        existingMap.set(t.id, t);
-      }
-      for (const t of sanitizedTasks) {
-        if (existingMap.has(t.id)) {
-          existingMap.set(t.id, { ...existingMap.get(t.id)!, ...t });
-        } else {
-          existingMap.set(t.id, t);
-        }
-      }
-      setStore(TASKS_KEY, Array.from(existingMap.values()));
+    const currentTasks = getStore<Task>(TASKS_KEY);
+    const mergedResult = mergeImportedTasks(currentTasks, sanitizedTasks, mode, filterTags);
+    if (mergedResult.error) {
+      return { success: false, count: 0, error: mergedResult.error };
     }
+
+    setStore(TASKS_KEY, mergedResult.nextTasks);
 
     if (typeof window !== "undefined") {
       markLocalModified();
@@ -1503,7 +1492,11 @@ export function importTasksJSON(
       window.dispatchEvent(new CustomEvent("tasks-updated"));
     }
 
-    return { success: true, count: sanitizedTasks.length };
+    return {
+      success: true,
+      count: mergedResult.importedCount,
+      replacedCount: mergedResult.replacedCount,
+    };
   } catch (err: any) {
     return { success: false, count: 0, error: err?.message || "خطا در پردازش داده‌های فایل." };
   }

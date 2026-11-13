@@ -230,7 +230,7 @@ export default function Sidebar({ open, view, onViewChange, onClose, onOpenBacku
               )}
 
               <div className="pt-1 text-center text-[11px] select-none" style={{ color: fgMuted }}>
-                <span>نسخه ۴.۰.۰</span>
+                <span>نسخه ۴.۰.۸</span>
               </div>
             </div>
           </motion.div>

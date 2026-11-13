@@ -33,6 +33,7 @@ import { exportDatabase, importDatabase, BACKUP_KEYS, exportTasksJSON, importTas
 import { syncManager, apiUrl } from "@/lib/sync";
 import { LocalSnapshotService, type LocalSnapshot } from "@/lib/localSnapshots";
 import { toPersianDigits } from "@/lib/shamsi";
+import { TasksImportMode, filterTasksByTags } from "@/lib/taskExchange";
 
 interface Props {
   isOpen: boolean;
@@ -51,13 +52,18 @@ export default function BackupModal({ isOpen, onClose, onSuccess }: Props) {
   // Tasks Tab States
   const [tasksCopySuccess, setTasksCopySuccess] = useState(false);
   const [tasksImportText, setTasksImportText] = useState("");
-  const [tasksImportMode, setTasksImportMode] = useState<"append" | "replace">("append");
-  const [exportTagFilter, setExportTagFilter] = useState<string>("all");
+  const [tasksImportMode, setTasksImportMode] = useState<TasksImportMode>("append");
+  const [exportTagFilters, setExportTagFilters] = useState<string[]>([]);
+  const [replaceFilterTags, setReplaceFilterTags] = useState<string[]>([]);
+  const [tasksRefreshTick, setTasksRefreshTick] = useState(0);
+
+  const allTasksList = useMemo(() => {
+    return TaskStore.list();
+  }, [isOpen, activeTab, tasksRefreshTick]);
 
   const availableTags = useMemo(() => {
-    const list = TaskStore.list();
     const tagMap = new Map<string, number>();
-    list.forEach((t) => {
+    allTasksList.forEach((t) => {
       t.tags?.forEach((tg) => {
         if (tg && tg.trim()) {
           const clean = tg.trim();
@@ -66,7 +72,18 @@ export default function BackupModal({ isOpen, onClose, onSuccess }: Props) {
       });
     });
     return Array.from(tagMap.entries()).map(([tag, count]) => ({ tag, count }));
-  }, [isOpen, activeTab]);
+  }, [allTasksList]);
+
+  const exportMatchingCount = useMemo(() => {
+    return filterTasksByTags(allTasksList, exportTagFilters).length;
+  }, [allTasksList, exportTagFilters]);
+
+  const replaceMatchingCount = useMemo(() => {
+    if (replaceFilterTags.length === 0) return 0;
+    return filterTasksByTags(allTasksList, replaceFilterTags).length;
+  }, [allTasksList, replaceFilterTags]);
+
+  const preservedTasksCount = Math.max(0, allTasksList.length - replaceMatchingCount);
 
   // WiFi Sync States
   const [serverStatus, setServerStatus] = useState<"checking" | "connected" | "disconnected">("checking");
@@ -335,16 +352,31 @@ export default function BackupModal({ isOpen, onClose, onSuccess }: Props) {
   if (!isOpen) return null;
 
   // Tasks Tab Handlers
+  const toggleExportTag = (tag: string) => {
+    setExportTagFilters((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
+  };
+
+  const toggleReplaceTag = (tag: string) => {
+    setError(null);
+    setReplaceFilterTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
+  };
+
+  const exportTagsLabel = exportTagFilters.map((t) => `#${t}`).join(" و ");
+
   const handleExportTasksFile = () => {
     try {
       setError(null);
-      const dataStr = exportTasksJSON(exportTagFilter);
+      const dataStr = exportTasksJSON(exportTagFilters);
       const blob = new Blob([dataStr], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       const now = new Date();
       const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-      const tagSuffix = exportTagFilter !== "all" ? `_${exportTagFilter}` : "";
+      const tagSuffix = exportTagFilters.length > 0 ? `_${exportTagFilters.join("_")}` : "";
       
       a.href = url;
       a.download = `FocusFlow_Tasks${tagSuffix}_${dateStr}.json`;
@@ -353,7 +385,7 @@ export default function BackupModal({ isOpen, onClose, onSuccess }: Props) {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
-      setSuccessMsg(`فایل تسک‌ها ${exportTagFilter !== "all" ? `(برچسب #${exportTagFilter}) ` : ""}با موفقیت دانلود شد.`);
+      setSuccessMsg(`فایل تسک‌ها ${exportTagFilters.length > 0 ? `(برچسب‌های ${exportTagsLabel}) ` : ""}با موفقیت دانلود شد.`);
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (err) {
       setError("خطا در ایجاد و دانلود فایل تسک‌ها.");
@@ -363,10 +395,10 @@ export default function BackupModal({ isOpen, onClose, onSuccess }: Props) {
   const handleExportTasksClipboard = () => {
     try {
       setError(null);
-      const dataStr = exportTasksJSON(exportTagFilter);
+      const dataStr = exportTasksJSON(exportTagFilters);
       navigator.clipboard.writeText(dataStr).then(() => {
         setTasksCopySuccess(true);
-        setSuccessMsg(`کد JSON تسک‌ها ${exportTagFilter !== "all" ? `(برچسب #${exportTagFilter}) ` : ""}با موفقیت در کلیپ‌بورد کپی شد.`);
+        setSuccessMsg(`کد JSON تسک‌ها ${exportTagFilters.length > 0 ? `(برچسب‌های ${exportTagsLabel}) ` : ""}با موفقیت در کلیپ‌بورد کپی شد.`);
         setTimeout(() => {
           setTasksCopySuccess(false);
           setSuccessMsg(null);
@@ -377,9 +409,32 @@ export default function BackupModal({ isOpen, onClose, onSuccess }: Props) {
     }
   };
 
+  const applyImportedTasksSuccess = (res: { count: number; replacedCount?: number }) => {
+    let msg = "";
+    if (tasksImportMode === "replace_filtered") {
+      msg = `${toPersianDigits(res.count)} تسک جدید جایگزین ${toPersianDigits(res.replacedCount ?? 0)} تسک دارای برچسب‌های انتخابی شدند.`;
+    } else if (tasksImportMode === "replace") {
+      msg = `${toPersianDigits(res.count)} تسک با موفقیت جایگزین شدند.`;
+    } else {
+      msg = `${toPersianDigits(res.count)} تسک با موفقیت افزوده و ادغام شدند.`;
+    }
+    setSuccessMsg(msg);
+    setTasksRefreshTick((v) => v + 1);
+    syncManager.triggerImmediatePush();
+    setTimeout(() => {
+      onSuccess();
+    }, 900);
+  };
+
   const handleImportTasksFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     setError(null);
     setSuccessMsg(null);
+    if (tasksImportMode === "replace_filtered" && replaceFilterTags.length === 0) {
+      setError("ابتدا حداقل یک برچسب را برای جایگزینی فیلترشده انتخاب کنید.");
+      e.target.value = "";
+      return;
+    }
+
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -394,12 +449,9 @@ export default function BackupModal({ isOpen, onClose, onSuccess }: Props) {
         const content = event.target?.result as string;
         if (!content) throw new Error("فایل خالی است");
         
-        const res = importTasksJSON(content, tasksImportMode);
+        const res = importTasksJSON(content, tasksImportMode, replaceFilterTags);
         if (res.success) {
-          const modeLabel = tasksImportMode === "replace" ? "جایگزین شدند" : "افزوده و ادغام شدند";
-          setSuccessMsg(`${toPersianDigits(res.count)} تسک با موفقیت ${modeLabel}.`);
-          onSuccess();
-          setTimeout(() => setSuccessMsg(null), 4000);
+          applyImportedTasksSuccess(res);
         } else {
           setError(res.error || "خطا در پردازش فایل تسک‌ها.");
         }
@@ -412,6 +464,10 @@ export default function BackupModal({ isOpen, onClose, onSuccess }: Props) {
   };
 
   const handleImportTasksFromText = () => {
+    if (tasksImportMode === "replace_filtered" && replaceFilterTags.length === 0) {
+      setError("ابتدا حداقل یک برچسب را برای جایگزینی فیلترشده انتخاب کنید.");
+      return;
+    }
     if (!tasksImportText.trim()) {
       setError("لطفاً متن JSON تسک‌ها را در کادر وارد کنید.");
       return;
@@ -419,13 +475,10 @@ export default function BackupModal({ isOpen, onClose, onSuccess }: Props) {
     setError(null);
     setSuccessMsg(null);
 
-    const res = importTasksJSON(tasksImportText, tasksImportMode);
+    const res = importTasksJSON(tasksImportText, tasksImportMode, replaceFilterTags);
     if (res.success) {
-      const modeLabel = tasksImportMode === "replace" ? "جایگزین شدند" : "افزوده و ادغام شدند";
-      setSuccessMsg(`${toPersianDigits(res.count)} تسک با موفقیت ${modeLabel}.`);
       setTasksImportText("");
-      onSuccess();
-      setTimeout(() => setSuccessMsg(null), 4000);
+      applyImportedTasksSuccess(res);
     } else {
       setError(res.error || "خطا در وارد کردن تسک‌ها از متن.");
     }
@@ -902,40 +955,48 @@ export default function BackupModal({ isOpen, onClose, onSuccess }: Props) {
             <div className="space-y-3">
               <h4 className="text-xs font-bold" style={{ color: fgMuted }}>۱. دانلود و خروجی تسک‌ها (جهت ارائه به هوش مصنوعی)</h4>
               
-              {/* Tag filter chips */}
+              {/* Multi-tag filter chips */}
               {availableTags.length > 0 && (
-                <div className="space-y-1.5 p-2.5 rounded-xl border" style={{ backgroundColor: inputBg, borderColor: cardBorder }}>
-                  <div className="flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: fgMuted }}>
-                    <Tag className="h-3.5 w-3.5 text-indigo-400" />
-                    <span>فیلتر بر اساس برچسب:</span>
+                <div className="space-y-2 p-2.5 rounded-xl border" style={{ backgroundColor: inputBg, borderColor: cardBorder }}>
+                  <div className="flex items-center justify-between gap-2 text-[11px] font-semibold" style={{ color: fgMuted }}>
+                    <div className="flex items-center gap-1.5">
+                      <Tag className="h-3.5 w-3.5 text-indigo-400" />
+                      <span>فیلتر بر اساس یک یا چند برچسب (اشتراک هم‌زمان):</span>
+                    </div>
+                    <span className="text-[10px] text-indigo-300 font-bold">
+                      {toPersianDigits(exportMatchingCount)} تسک
+                    </span>
                   </div>
-                  <div className="flex flex-wrap gap-1.5 pt-1">
+                  <div className="flex flex-wrap gap-1.5 pt-0.5">
                     <button
                       type="button"
-                      onClick={() => setExportTagFilter("all")}
+                      onClick={() => setExportTagFilters([])}
                       className={`text-[11px] font-medium px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                        exportTagFilter === "all"
+                        exportTagFilters.length === 0
                           ? "bg-indigo-600 text-white shadow-sm"
                           : "bg-white/5 text-gray-400 hover:text-white hover:bg-white/10"
                       }`}
                     >
                       همه تسک‌ها
                     </button>
-                    {availableTags.map(({ tag, count }) => (
-                      <button
-                        key={tag}
-                        type="button"
-                        onClick={() => setExportTagFilter(tag)}
-                        className={`text-[11px] font-medium px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
-                          exportTagFilter === tag
-                            ? "bg-indigo-600 text-white shadow-sm"
-                            : "bg-white/5 text-gray-400 hover:text-white hover:bg-white/10"
-                        }`}
-                      >
-                        <span>#{tag}</span>
-                        <span className="text-[9px] opacity-80">({toPersianDigits(count)})</span>
-                      </button>
-                    ))}
+                    {availableTags.map(({ tag, count }) => {
+                      const isSelected = exportTagFilters.includes(tag);
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => toggleExportTag(tag)}
+                          className={`text-[11px] font-medium px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                            isSelected
+                              ? "bg-indigo-600 text-white shadow-sm"
+                              : "bg-white/5 text-gray-400 hover:text-white hover:bg-white/10"
+                          }`}
+                        >
+                          <span>#{tag}</span>
+                          <span className="text-[9px] opacity-80">({toPersianDigits(count)})</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -950,10 +1011,14 @@ export default function BackupModal({ isOpen, onClose, onSuccess }: Props) {
                     <Download className="h-5 w-5" />
                   </div>
                   <span className="text-[11px] font-bold" style={{ color: fg }}>
-                    {exportTagFilter === "all" ? "دانلود فایل JSON تسک‌ها" : `دانلود تسک‌های #${exportTagFilter}`}
+                    {exportTagFilters.length === 0
+                      ? "دانلود فایل JSON تسک‌ها"
+                      : `دانلود تسک‌های فیلترشده (${toPersianDigits(exportMatchingCount)})`}
                   </span>
-                  <span className="text-[9px]" style={{ color: fgMuted }}>
-                    {exportTagFilter === "all" ? "خروجی سبک، تمام تسک‌ها" : `فقط تسک‌های دارای برچسب #${exportTagFilter}`}
+                  <span className="text-[9px] text-center" style={{ color: fgMuted }}>
+                    {exportTagFilters.length === 0
+                      ? "خروجی سبک، تمام تسک‌ها"
+                      : `فقط دارای ${exportTagsLabel}`}
                   </span>
                 </button>
 
@@ -966,7 +1031,11 @@ export default function BackupModal({ isOpen, onClose, onSuccess }: Props) {
                     {tasksCopySuccess ? <Check className="h-5 w-5 text-emerald-400" /> : <Copy className="h-5 w-5" />}
                   </div>
                   <span className="text-[11px] font-bold" style={{ color: fg }}>
-                    {tasksCopySuccess ? "کپی شد!" : exportTagFilter === "all" ? "کپی متن JSON تسک‌ها" : `کپی متن #${exportTagFilter}`}
+                    {tasksCopySuccess
+                      ? "کپی شد!"
+                      : exportTagFilters.length === 0
+                      ? "کپی متن JSON تسک‌ها"
+                      : `کپی متن فیلترشده (${toPersianDigits(exportMatchingCount)})`}
                   </span>
                   <span className="text-[9px]" style={{ color: fgMuted }}>جهت چسباندن در چت هوش مصنوعی</span>
                 </button>
@@ -980,28 +1049,48 @@ export default function BackupModal({ isOpen, onClose, onSuccess }: Props) {
               </div>
 
               {/* Mode switch */}
-              <div className="p-1 rounded-xl flex gap-1 border" style={{ backgroundColor: inputBg, borderColor: cardBorder }}>
+              <div className="p-1 rounded-xl grid grid-cols-1 sm:grid-cols-3 gap-1 border" style={{ backgroundColor: inputBg, borderColor: cardBorder }}>
                 <button
                   type="button"
-                  onClick={() => setTasksImportMode("append")}
-                  className={`flex-1 py-2 px-2 text-[11px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer text-center ${
+                  onClick={() => {
+                    setError(null);
+                    setTasksImportMode("append");
+                  }}
+                  className={`py-2 px-2 text-[11px] font-bold rounded-lg transition-all cursor-pointer text-center ${
                     tasksImportMode === "append"
                       ? "bg-indigo-600 text-white shadow-md"
                       : "text-gray-400 hover:text-white hover:bg-white/5"
                   }`}
                 >
-                  افزودن و ادغام (تسک‌های قبلی بمانند)
+                  افزودن و ادغام
                 </button>
                 <button
                   type="button"
-                  onClick={() => setTasksImportMode("replace")}
-                  className={`flex-1 py-2 px-2 text-[11px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer text-center ${
+                  onClick={() => {
+                    setError(null);
+                    setTasksImportMode("replace_filtered");
+                  }}
+                  className={`py-2 px-2 text-[11px] font-bold rounded-lg transition-all cursor-pointer text-center ${
+                    tasksImportMode === "replace_filtered"
+                      ? "bg-amber-600 text-white shadow-md"
+                      : "text-gray-400 hover:text-white hover:bg-white/5"
+                  }`}
+                >
+                  جایگزینی فیلترشده (برچسب)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError(null);
+                    setTasksImportMode("replace");
+                  }}
+                  className={`py-2 px-2 text-[11px] font-bold rounded-lg transition-all cursor-pointer text-center ${
                     tasksImportMode === "replace"
                       ? "bg-rose-600 text-white shadow-md"
                       : "text-gray-400 hover:text-white hover:bg-white/5"
                   }`}
                 >
-                  جایگزینی کامل (تسک‌های قبلی پاک شوند)
+                  جایگزینی کامل
                 </button>
               </div>
 
@@ -1010,25 +1099,107 @@ export default function BackupModal({ isOpen, onClose, onSuccess }: Props) {
                   <span>
                     💡 <b>حالت افزودن:</b> تسک‌های کنونی شما در برنامه باقی می‌مانند و موارد جدید این فایل به لیست اضافه می‌شوند.
                   </span>
+                ) : tasksImportMode === "replace_filtered" ? (
+                  <span className="text-amber-300">
+                    🎯 <b>جایگزینی فیلترشده:</b> فقط تسک‌هایی که <b>همه برچسب‌های انتخابی زیر</b> را دارند پاک می‌شوند و همه تسک‌های فایل جدید جایگزین آن‌ها می‌گردند. سایر تسک‌ها دست‌نخورده می‌مانند.
+                  </span>
                 ) : (
                   <span className="text-rose-300">
-                    ⚠️ <b>حالت جایگزینی:</b> تمام تسک‌های پیشین حذف شده و فایل جدید جایگزین آنها خواهد شد.
+                    ⚠️ <b>حالت جایگزینی کامل:</b> تمام تسک‌های پیشین حذف شده و فایل جدید جایگزین آنها خواهد شد.
                   </span>
                 )}
               </div>
 
+              {/* Multi-tag picker for filtered replacement */}
+              {tasksImportMode === "replace_filtered" && (
+                <div className="space-y-2 p-3 rounded-xl border border-amber-500/30 bg-amber-500/5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-semibold">
+                    <div className="flex items-center gap-1.5 text-amber-300">
+                      <Tag className="h-3.5 w-3.5" />
+                      <span>انتخاب ۱ یا چند برچسب هدف برای جایگزینی:</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {exportTagFilters.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setError(null);
+                            setReplaceFilterTags([...exportTagFilters]);
+                          }}
+                          className="text-[10px] px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-200 hover:bg-amber-500/30 transition-colors cursor-pointer"
+                        >
+                          کپی از فیلتر خروجی
+                        </button>
+                      )}
+                      {replaceFilterTags.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setReplaceFilterTags([])}
+                          className="text-[10px] px-2 py-0.5 rounded-md bg-white/10 text-gray-300 hover:bg-white/20 transition-colors cursor-pointer"
+                        >
+                          پاک کردن
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {availableTags.length === 0 ? (
+                    <p className="text-[11px] text-amber-200/80 py-1">
+                      هنوز هیچ تسکی با برچسب در برنامه وجود ندارد.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                      {availableTags.map(({ tag, count }) => {
+                        const isSelected = replaceFilterTags.includes(tag);
+                        return (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => toggleReplaceTag(tag)}
+                            className={`text-[11px] font-medium px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                              isSelected
+                                ? "bg-amber-600 text-white shadow-sm"
+                                : "bg-white/5 text-gray-300 hover:text-white hover:bg-white/10"
+                            }`}
+                          >
+                            <span>#{tag}</span>
+                            <span className="text-[9px] opacity-80">({toPersianDigits(count)})</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div className="pt-1 text-[10px] leading-relaxed border-t border-amber-500/20">
+                    {replaceFilterTags.length === 0 ? (
+                      <span className="text-amber-300 font-semibold">
+                        ⚠️ حداقل یک برچسب انتخاب کنید تا تسک‌های قابل جایگزینی مشخص شوند.
+                      </span>
+                    ) : (
+                      <span className="text-amber-200">
+                        {toPersianDigits(replaceMatchingCount)} تسک دارای همه برچسب‌های انتخابی جایگزین می‌شوند و {toPersianDigits(preservedTasksCount)} تسک دیگر امن باقی می‌مانند.
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Upload File Button */}
-              <label 
-                className="w-full flex items-center justify-center gap-2 rounded-2xl border border-dashed p-4 hover:bg-white/5 transition-all duration-200 cursor-pointer"
+              <label
+                className={`w-full flex items-center justify-center gap-2 rounded-2xl border border-dashed p-4 transition-all duration-200 ${
+                  tasksImportMode === "replace_filtered" && replaceFilterTags.length === 0
+                    ? "opacity-50 cursor-not-allowed"
+                    : "hover:bg-white/5 cursor-pointer"
+                }`}
                 style={{ borderColor: cardBorder }}
               >
                 <Upload className="h-5 w-5 text-indigo-400" />
                 <span className="text-xs font-bold" style={{ color: fg }}>انتخاب و آپلود فایل JSON تسک‌ها</span>
-                <input 
-                  type="file" 
-                  accept=".json,application/json" 
-                  className="hidden" 
-                  onChange={handleImportTasksFile} 
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  className="hidden"
+                  onChange={handleImportTasksFile}
                 />
               </label>
 
@@ -1051,11 +1222,21 @@ export default function BackupModal({ isOpen, onClose, onSuccess }: Props) {
                 {tasksImportText.trim() && (
                   <button
                     onClick={handleImportTasksFromText}
-                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 text-xs font-bold transition-all cursor-pointer shadow-md"
+                    className={`w-full flex items-center justify-center gap-2 rounded-xl text-white py-2.5 text-xs font-bold transition-all cursor-pointer shadow-md ${
+                      tasksImportMode === "replace_filtered"
+                        ? "bg-amber-600 hover:bg-amber-700"
+                        : tasksImportMode === "replace"
+                        ? "bg-rose-600 hover:bg-rose-700"
+                        : "bg-indigo-600 hover:bg-indigo-700"
+                    }`}
                   >
                     <CheckCircle className="h-4 w-4" />
                     <span>
-                      اعمال تسک‌ها ({tasksImportMode === "append" ? "افزودن و ادغام" : "جایگزینی کامل"})
+                      {tasksImportMode === "replace_filtered"
+                        ? "اعمال جایگزینی فیلترشده"
+                        : tasksImportMode === "replace"
+                        ? "اعمال جایگزینی کامل"
+                        : "اعمال تسک‌ها (افزودن و ادغام)"}
                     </span>
                   </button>
                 )}
