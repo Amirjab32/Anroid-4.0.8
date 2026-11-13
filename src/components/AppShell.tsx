@@ -23,11 +23,14 @@ import NotesView from "@/views/NotesView";
 import MotivationView from "@/views/MotivationView";
 import GoingUpView from "@/views/GoingUpView";
 import PlannerView from "@/views/PlannerView";
+import SettingsView from "@/views/SettingsView";
 import PlannerFloatingTimer from "@/components/planner/PlannerFloatingTimer";
 import PrayerTimelineBar from "@/components/prayer/PrayerTimelineBar";
 import { TimeCheckService } from "@/lib/timeCheck";
 import { startReminderScheduler, runActiveRemindersCheck } from "@/lib/notifications";
 import { AudioStorageService } from "@/lib/audioStorage";
+import { AppViewId, VIEW_TITLES } from "@/lib/navigation";
+import { APP_SETTINGS_EVENT, AppSettings, AppSettingsService } from "@/lib/appSettings";
 import IntroStressOverlay from "@/components/shared/IntroStressOverlay";
 import BackupModal from "@/components/shared/BackupModal";
 import DeleteConfirmationModal from "@/components/shared/DeleteConfirmationModal";
@@ -38,20 +41,33 @@ const DEFAULT_STAGES = 4;
 
 function AppContent() {
   const { bg, fg, fgMuted, cardBorder } = useThemeStyles();
-  const [view, setView] = useState<"tasks" | "kanban" | "planner" | "habits" | "going_up" | "srs" | "quiz" | "notes" | "motivation">(() => {
+  const [appSettings, setAppSettings] = useState<AppSettings>(() => AppSettingsService.get());
+  const [view, setView] = useState<AppViewId>(() => {
     if (typeof window !== "undefined") {
       // Clear legacy localStorage value to prevent old state from overriding the default
       localStorage.removeItem("focusflow_current_view");
       
       const saved = sessionStorage.getItem("focusflow_current_view");
-      if (saved) return saved as any;
+      if (saved && saved in VIEW_TITLES) return saved as AppViewId;
     }
-    return "tasks";
+    return AppSettingsService.getEffectiveStartView();
   });
 
   useEffect(() => {
     sessionStorage.setItem("focusflow_current_view", view);
   }, [view]);
+
+  useEffect(() => {
+    const syncAppSettings = () => setAppSettings(AppSettingsService.get());
+    window.addEventListener(APP_SETTINGS_EVENT, syncAppSettings);
+    window.addEventListener("focusflow-db-synced", syncAppSettings);
+    window.addEventListener("focusflow-data-changed", syncAppSettings);
+    return () => {
+      window.removeEventListener(APP_SETTINGS_EVENT, syncAppSettings);
+      window.removeEventListener("focusflow-db-synced", syncAppSettings);
+      window.removeEventListener("focusflow-data-changed", syncAppSettings);
+    };
+  }, []);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [tasks, setTasks] = useState<Task[]>(() => TaskStore.list());
@@ -90,9 +106,10 @@ function AppContent() {
 
   // Check 3-hour limit and mid-flow resume for Intro Overlay
   const checkIntro = useCallback(async () => {
+    const autoIntroEnabled = AppSettingsService.get().autoShowIntro;
     const activeSession = getIntroSessionState();
     if (activeSession?.active) {
-      if (activeSession.manual || shouldShowIntro(getLastIntroTimeRaw())) {
+      if (activeSession.manual || (autoIntroEnabled && shouldShowIntro(getLastIntroTimeRaw()))) {
         manualIntroRef.current = Boolean(activeSession.manual);
         setShowIntro(true);
       } else {
@@ -103,18 +120,18 @@ function AppContent() {
       return;
     }
 
-    if (showIntroRef.current) return;
+    if (showIntroRef.current || !autoIntroEnabled) return;
 
     let lastTimeRaw = getLastIntroTimeRaw();
     if (!lastTimeRaw) {
       await syncManager.waitForInitialSync(1000);
       if (!mountedRef.current) return;
       const sessionAfterSync = getIntroSessionState();
-      if (sessionAfterSync?.active || showIntroRef.current) return;
+      if (sessionAfterSync?.active || showIntroRef.current || !AppSettingsService.get().autoShowIntro) return;
       lastTimeRaw = getLastIntroTimeRaw();
     }
 
-    if (shouldShowIntro(lastTimeRaw)) {
+    if (AppSettingsService.get().autoShowIntro && shouldShowIntro(lastTimeRaw)) {
       manualIntroRef.current = false;
       saveIntroSessionState({
         active: true,
@@ -471,7 +488,7 @@ function AppContent() {
           menuOpen={menuOpen} 
           onMenuToggle={() => setMenuOpen((o) => !o)} 
         />
-        <PrayerTimelineBar />
+        {appSettings.showPrayerBar && <PrayerTimelineBar />}
       </div>
       <PlannerFloatingTimer />
       <Sidebar 
@@ -508,6 +525,12 @@ function AppContent() {
             )}
             {view === "motivation" && (
               <MotivationView />
+            )}
+            {view === "settings" && (
+              <SettingsView
+                onNavigateView={(v) => setView(v as AppViewId)}
+                onOpenBackup={() => setIsBackupOpen(true)}
+              />
             )}
           </motion.div>
         </AnimatePresence>

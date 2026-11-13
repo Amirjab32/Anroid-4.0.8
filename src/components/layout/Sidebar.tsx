@@ -1,9 +1,12 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { CheckSquare, Columns3, Repeat, ArrowUpCircle, Brain, LogOut, X, ClipboardList, AlertTriangle, ShieldCheck, ShieldAlert, Database, Notebook, Flame, Calendar } from "lucide-react";
+import { CheckSquare, LogOut, X, AlertTriangle, ShieldCheck, ShieldAlert, Database, Settings } from "lucide-react";
 import { useThemeStyles } from "@/lib/useThemeStyles";
 import { syncManager } from "@/lib/sync";
 import { toPersianDigits } from "@/lib/shamsi";
+import { NAV_ITEMS, MainNavId } from "@/lib/navigation";
+import { APP_SETTINGS_EVENT, AppSettingsService } from "@/lib/appSettings";
+import { markLocalModified } from "@/lib/store";
 
 interface Props {
   open: boolean;
@@ -13,25 +16,33 @@ interface Props {
   onOpenBackup: () => void;
 }
 
-const NAV_ITEMS = [
-  { id: "tasks", label: "مدیریت تسک", icon: CheckSquare },
-  { id: "kanban", label: "کانبان", icon: Columns3 },
-  { id: "planner", label: "پلنر", icon: Calendar },
-  { id: "habits", label: "ردیاب عادت", icon: Repeat },
-  { id: "going_up", label: "بالا رفتن", icon: ArrowUpCircle },
-  { id: "srs", label: "مرور فاصله‌دار", icon: Brain },
-  { id: "quiz", label: "ردیاب تست", icon: ClipboardList },
-  { id: "motivation", label: "انگیزه و اهداف", icon: Flame },
-  { id: "notes", label: "دفترچه یادداشت", icon: Notebook },
-];
-
 export default function Sidebar({ open, view, onViewChange, onClose, onOpenBackup }: Props) {
   const { sidebarBg, fg, fgMuted, cardBorder } = useThemeStyles();
   const [showConfirm, setShowConfirm] = useState(false);
   const [deleteCountdown, setDeleteCountdown] = useState(5.0);
+  const [hiddenMenuIds, setHiddenMenuIds] = useState<MainNavId[]>(() => AppSettingsService.get().hiddenMenuIds);
   const [safeMode, setSafeMode] = useState(() => {
     return localStorage.getItem("focusflow_safe_mode") !== "false";
   });
+
+  useEffect(() => {
+    const syncAppSettings = () => setHiddenMenuIds(AppSettingsService.get().hiddenMenuIds);
+    const syncSafeMode = () => setSafeMode(localStorage.getItem("focusflow_safe_mode") !== "false");
+    const syncAll = () => {
+      syncAppSettings();
+      syncSafeMode();
+    };
+    window.addEventListener(APP_SETTINGS_EVENT, syncAppSettings);
+    window.addEventListener("safe-mode-changed", syncSafeMode);
+    window.addEventListener("focusflow-db-synced", syncAll);
+    window.addEventListener("focusflow-data-changed", syncAppSettings);
+    return () => {
+      window.removeEventListener(APP_SETTINGS_EVENT, syncAppSettings);
+      window.removeEventListener("safe-mode-changed", syncSafeMode);
+      window.removeEventListener("focusflow-db-synced", syncAll);
+      window.removeEventListener("focusflow-data-changed", syncAppSettings);
+    };
+  }, []);
 
   useEffect(() => {
     if (!open) {
@@ -65,8 +76,12 @@ export default function Sidebar({ open, view, onViewChange, onClose, onOpenBacku
     const newVal = !safeMode;
     setSafeMode(newVal);
     localStorage.setItem("focusflow_safe_mode", String(newVal));
+    markLocalModified();
     window.dispatchEvent(new CustomEvent("safe-mode-changed", { detail: { enabled: newVal } }));
+    window.dispatchEvent(new CustomEvent("focusflow-data-changed", { detail: { key: "focusflow_safe_mode" } }));
   };
+
+  const visibleNavItems = NAV_ITEMS.filter((item) => !hiddenMenuIds.includes(item.id));
 
   return (
     <AnimatePresence>
@@ -99,16 +114,35 @@ export default function Sidebar({ open, view, onViewChange, onClose, onOpenBacku
                 </div>
                 <span className="text-lg font-bold" style={{ color: fg }}>بهره‌وری</span>
               </div>
-              <button
-                onClick={onClose}
-                className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-white/10"
-                style={{ border: `1px solid ${cardBorder}`, color: fgMuted }}
-              >
-                <X className="h-4 w-4" />
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleSelect("settings")}
+                  title="تنظیمات"
+                  aria-label="تنظیمات"
+                  data-testid="sidebar-settings-button"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-white/10 cursor-pointer"
+                  style={
+                    view === "settings"
+                      ? { backgroundColor: "#6366f1", border: "1px solid #6366f1", color: "#ffffff" }
+                      : { border: `1px solid ${cardBorder}`, color: fgMuted }
+                  }
+                >
+                  <Settings className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label="بستن منو"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-white/10 cursor-pointer"
+                  style={{ border: `1px solid ${cardBorder}`, color: fgMuted }}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
             <nav className="flex-1 space-y-1 p-4 overflow-y-auto">
-              {NAV_ITEMS.map(({ id, label, icon: Icon }, i) => (
+              {visibleNavItems.map(({ id, label, icon: Icon }, i) => (
                 <motion.button
                   key={id}
                   onClick={() => handleSelect(id)}

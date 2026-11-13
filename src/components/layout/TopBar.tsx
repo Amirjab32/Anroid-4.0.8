@@ -9,24 +9,13 @@ import { TimeCheckService, TimeCheckStatus, TIME_STATUS_EVENT } from "@/lib/time
 import { Wifi, WifiOff, RefreshCw, Laptop, AlertTriangle, X, BellRing, Check } from "lucide-react";
 import { PWAInstallButton } from "@/components/shared/PWAInstallButton";
 import AlarmPermissionGuideModal from "@/components/shared/AlarmPermissionGuideModal";
+import { VIEW_TITLES } from "@/lib/navigation";
 
 interface Props {
   view: string;
   menuOpen: boolean;
   onMenuToggle: () => void;
 }
-
-const VIEW_TITLES: Record<string, string> = {
-  tasks: "مدیریت تسک",
-  kanban: "کانبان",
-  planner: "پلنر",
-  habits: "ردیاب عادت",
-  going_up: "بالا رفتن",
-  srs: "مرور فاصله‌دار",
-  quiz: "ردیاب تست",
-  motivation: "انگیزه و اهداف",
-  notes: "دفترچه یادداشت",
-};
 
 export default function TopBar({ view, menuOpen, onMenuToggle }: Props) {
   const { headerBg, fg, fgMuted, cardBorder } = useThemeStyles();

@@ -694,7 +694,15 @@ export default function BackupModal({ isOpen, onClose, onSuccess }: Props) {
     try {
       const merged: any = { ...serverData, ...localDataObj };
 
+      const objectKeys = new Set([
+        "focusflow_going_up_settings",
+        "focusflow_going_up_state",
+        "focusflow_srs_reminder_settings",
+        "focusflow_app_settings",
+      ]);
+
       BACKUP_KEYS.forEach((key) => {
+        if (objectKeys.has(key)) return;
         const localArr = Array.isArray(localDataObj[key]) ? localDataObj[key] : [];
         const serverArr = Array.isArray(serverData[key]) ? serverData[key] : [];
         
@@ -728,7 +736,7 @@ export default function BackupModal({ isOpen, onClose, onSuccess }: Props) {
         merged[key] = Array.from(map.values());
       });
 
-      // فیلدهای غیرآرایه‌ای مربوط به رتبه بالا رفتن
+      // فیلدهای غیرآرایه‌ای مربوط به رتبه بالا رفتن و تنظیمات برنامه
       merged["focusflow_going_up_settings"] = {
         ...(serverData["focusflow_going_up_settings"] || {}),
         ...(localDataObj["focusflow_going_up_settings"] || {})
@@ -740,6 +748,10 @@ export default function BackupModal({ isOpen, onClose, onSuccess }: Props) {
       merged["focusflow_srs_reminder_settings"] = {
         ...(serverData["focusflow_srs_reminder_settings"] || {}),
         ...(localDataObj["focusflow_srs_reminder_settings"] || {})
+      };
+      merged["focusflow_app_settings"] = {
+        ...(serverData["focusflow_app_settings"] || {}),
+        ...(localDataObj["focusflow_app_settings"] || {})
       };
 
       // تاریخ کنکور و امتحانات نهایی و حالت امن و تم

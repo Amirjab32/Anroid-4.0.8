@@ -1161,7 +1161,11 @@ export const MotivationStore = {
   
   setKonkurDate(date: string): void {
     localStorage.setItem(KONKUR_DATE_KEY, date);
-    window.dispatchEvent(new CustomEvent("motivation-updated"));
+    markLocalModified();
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("motivation-updated"));
+      window.dispatchEvent(new CustomEvent("focusflow-data-changed", { detail: { key: KONKUR_DATE_KEY } }));
+    }
   },
   
   getFinalExamsDate(): string {
@@ -1170,7 +1174,11 @@ export const MotivationStore = {
   
   setFinalExamsDate(date: string): void {
     localStorage.setItem(FINAL_EXAMS_DATE_KEY, date);
-    window.dispatchEvent(new CustomEvent("motivation-updated"));
+    markLocalModified();
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("motivation-updated"));
+      window.dispatchEvent(new CustomEvent("focusflow-data-changed", { detail: { key: FINAL_EXAMS_DATE_KEY } }));
+    }
   }
 };
 
@@ -1191,8 +1199,16 @@ export const BACKUP_KEYS = [
   "focusflow_planner",
   "focusflow_planner_presets",
   "focusflow_planner_threshold",
-  "focusflow_srs_reminder_settings"
+  "focusflow_srs_reminder_settings",
+  "focusflow_app_settings"
 ];
+
+const OBJECT_BACKUP_KEYS = new Set([
+  "focusflow_going_up_settings",
+  "focusflow_going_up_state",
+  "focusflow_srs_reminder_settings",
+  "focusflow_app_settings",
+]);
 
 export function exportDatabase(): string {
   const data: Record<string, any> = {};
@@ -1202,10 +1218,10 @@ export function exportDatabase(): string {
       if (val) {
         data[key] = JSON.parse(val);
       } else {
-        data[key] = (key === "focusflow_going_up_settings" || key === "focusflow_going_up_state" || key === "focusflow_srs_reminder_settings") ? {} : [];
+        data[key] = OBJECT_BACKUP_KEYS.has(key) ? {} : [];
       }
     } catch {
-      data[key] = (key === "focusflow_going_up_settings" || key === "focusflow_going_up_state" || key === "focusflow_srs_reminder_settings") ? {} : [];
+      data[key] = OBJECT_BACKUP_KEYS.has(key) ? {} : [];
     }
   });
   data["focusflow_konkur_date"] = localStorage.getItem("focusflow_konkur_date") || "2027-06-25";
@@ -1288,7 +1304,7 @@ export function importDatabase(jsonString: string, forceOverride: boolean = fals
         }
       } else if (forceOverride) {
         // اعمال حاکمیت کامل فایل: پاک‌سازی هر داده محلی که در فایل جدید وجود ندارد
-        if (key === "focusflow_going_up_settings" || key === "focusflow_going_up_state" || key === "focusflow_srs_reminder_settings") {
+        if (OBJECT_BACKUP_KEYS.has(key)) {
           localStorage.setItem(key, JSON.stringify({}));
         } else {
           localStorage.setItem(key, JSON.stringify([]));
@@ -1437,6 +1453,7 @@ export function importDatabase(jsonString: string, forceOverride: boolean = fals
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("focusflow-prayer-settings-changed"));
       window.dispatchEvent(new CustomEvent("focusflow-srs-reminder-changed"));
+      window.dispatchEvent(new CustomEvent("focusflow-app-settings-changed"));
       window.dispatchEvent(new CustomEvent("focusflow-reminders-reschedule"));
       window.dispatchEvent(new CustomEvent("focusflow-data-changed", { detail: { key: "database_import" } }));
     }
